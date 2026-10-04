@@ -17,12 +17,14 @@
   --mx-coral-dim:   #b76a6a;
 
   /* Data scheme — imagery and charts only, never UI chrome. Left/right
-     limb pair is the MORPHXGEN data blue/amber, nudged to pass the dark-
-     surface lightness, chroma and CVD-separation checks. */
-  --mx-data-blue:   #5a92d8;
-  --mx-data-amber:  #d6703f;
-  --data-left:      var(--mx-data-blue);
-  --data-right:     var(--mx-data-amber);
+     limb pair: deep maroon / deep navy, chosen for the brand. They separate
+     well from each other (incl. colour-vision deficiency) but sit at ~1.15:1
+     against the dark chart surface, so charts keep their tooltips and the
+     metric tables as the readable fallback. */
+  --mx-data-maroon: #50090f;
+  --mx-data-navy:   #111970;
+  --data-left:      var(--mx-data-maroon);
+  --data-right:     var(--mx-data-navy);
 
   /* Bone alpha ramp */
   --mx-bone-04: rgba(228,227,223,0.04);

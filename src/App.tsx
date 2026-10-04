@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BodyScan, Dataset } from './core/types';
-import { importFiles, prepareClip } from './io/index';
+import { importFiles, listSkeletons, prepareClip, rebindSkeleton, registerSkeleton } from './io/index';
 import { analyzeGait } from './analysis/report';
 import { analyzeScan } from './analysis/scan';
 import { syntheticWalk } from './demo/synthetic';
@@ -36,6 +36,7 @@ export function App() {
   const [cutoff, setCutoff] = useState(6);
   const [status, setStatus] = useState('ready');
   const [busy, setBusy] = useState(false);
+  const [skeletons, setSkeletons] = useState<string[]>([]);
 
   const active = datasets.find((d) => d.id === activeId) ?? null;
   const clip = active?.kind === 'motion' ? active : null;
@@ -73,6 +74,8 @@ export function App() {
     setBusy(true);
     setStatus(`reading ${files.length} file${files.length > 1 ? 's' : ''}...`);
     const { datasets: added, skeletons, errors } = await importFiles(files);
+    setSkeletons(listSkeletons());
+    const guessed = added.filter((d) => d.kind === 'motion' && d.source?.matched === 'guessed');
     if (added.length) {
       setDatasets((ds) => [...ds, ...added]);
       setActiveId(added[added.length - 1].id);
@@ -80,11 +83,35 @@ export function App() {
     const notes = [
       added.length ? `loaded ${added.length}` : '',
       skeletons.length ? `skeleton ${skeletons.join(', ')} ready${added.length ? '' : ': drop its .amc trials'}` : '',
+      ...guessed.map((d) => `${d.name}: no skeleton name match, using ${d.kind === 'motion' ? d.source?.skeleton : ''} (change in sidebar)`),
       ...errors,
     ].filter(Boolean);
     setStatus(notes.join(' · ') || 'ready');
     setBusy(false);
   }, []);
+
+  /** Swap the active trial for the same motion rebuilt on another skeleton. */
+  const rebind = (skelName: string) => {
+    if (!clip?.source) return;
+    try {
+      const next = rebindSkeleton(clip, skelName);
+      setDatasets((ds) => ds.map((d) => (d.id === clip.id ? next : d)));
+      setActiveId(next.id);
+      setStatus(`${clip.name} on ${skelName}`);
+    } catch (e) {
+      setStatus((e as Error).message);
+    }
+  };
+
+  const loadSkeleton = async (file: File) => {
+    try {
+      registerSkeleton(await file.text(), file.name);
+      setSkeletons(listSkeletons());
+      rebind(file.name);
+    } catch (e) {
+      setStatus(`${file.name}: ${(e as Error).message}`);
+    }
+  };
 
   const remove = (id: string) => {
     setDatasets((ds) => {
@@ -139,6 +166,9 @@ export function App() {
           cutoff={cutoff}
           onCutoff={setCutoff}
           warnings={report?.warnings ?? []}
+          skeletons={skeletons}
+          onSkeleton={rebind}
+          onLoadSkeleton={loadSkeleton}
         />
 
         <section className="stage">

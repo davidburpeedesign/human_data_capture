@@ -6,7 +6,8 @@
  * ASF/AMC is the one paired format: an .amc trial is meaningless without
  * its skeleton (.asf, or .asx as the CMU database names it). Skeletons are
  * kept in a session registry so a subject's skeleton can be dropped once and
- * its trials afterwards, or all together.
+ * its trials afterwards, or all together; a trial can also be re-bound to
+ * any loaded skeleton when names don't line up.
  */
 import type { Dataset, MotionClip } from '../core/types';
 import { resolveLandmarks } from '../core/landmarks';
@@ -31,24 +32,45 @@ const ext = (name: string) => name.split('.').pop()?.toLowerCase() ?? '';
 const isSkeleton = (name: string) => ext(name) === 'asf' || ext(name) === 'asx';
 const stem = (name: string) => name.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '');
 
-/** Skeletons loaded this session, by file stem (CMU: `02` for `02.asx`). */
+/** Skeletons loaded this session, keyed by file name, in load order. */
 const skeletons = new Map<string, AsfSkeleton>();
+
+export const listSkeletons = () => [...skeletons.keys()];
 
 /**
  * Find the skeleton for an .amc trial. CMU names trials `<subject>_<trial>`,
- * so `02_01.amc` belongs to `02.asx`; failing that, a lone loaded skeleton
- * is the only sensible match.
+ * so `02_01.amc` belongs to `02.asx`. With no name match we fall back to the
+ * most recently loaded skeleton and say so (`guessed`): datasets don't always
+ * follow CMU naming, and the sidebar lets the user pick the right one.
  */
-export function skeletonFor(amcName: string): AsfSkeleton | undefined {
+export function skeletonFor(amcName: string): { name: string; skel: AsfSkeleton; matched: 'name' | 'guessed' } | undefined {
   const s = stem(amcName);
   const subject = s.split('_')[0];
-  return skeletons.get(s) ?? skeletons.get(subject) ?? (skeletons.size === 1 ? [...skeletons.values()][0] : undefined);
+  for (const want of [s, subject]) {
+    for (const [name, skel] of skeletons) if (stem(name) === want) return { name, skel, matched: 'name' };
+  }
+  const last = [...skeletons].pop();
+  return last ? { name: last[0], skel: last[1], matched: 'guessed' } : undefined;
 }
 
+/** Parse and register a skeleton; a re-loaded file name replaces the old one. */
 export function registerSkeleton(text: string, name: string): AsfSkeleton {
   const skel = parseAsf(text, name);
-  skeletons.set(stem(name), skel);
+  skeletons.delete(name);
+  skeletons.set(name, skel);
   return skel;
+}
+
+function amcClip(text: string, amcName: string, skelName: string, skel: AsfSkeleton, matched: 'name' | 'guessed' | 'chosen'): MotionClip {
+  const clip = prepareClip(parseAmc(text, skel, amcName));
+  return { ...clip, source: { text, skeleton: skelName, matched } };
+}
+
+/** Rebuild a skeleton-driven trial on another loaded skeleton. */
+export function rebindSkeleton(clip: MotionClip, skelName: string): MotionClip {
+  const skel = skeletons.get(skelName);
+  if (!clip.source || !skel) throw new Error(`cannot rebind ${clip.name} to ${skelName}`);
+  return amcClip(clip.source.text, clip.name, skelName, skel, 'chosen');
 }
 
 export async function importFile(file: File): Promise<Dataset> {
@@ -56,9 +78,9 @@ export async function importFile(file: File): Promise<Dataset> {
     case 'bvh':
       return prepareClip(parseBvh(await file.text(), file.name));
     case 'amc': {
-      const skel = skeletonFor(file.name);
-      if (!skel) throw new Error(`no skeleton for ${file.name}: load its .asf / .asx too`);
-      return prepareClip(parseAmc(await file.text(), skel, file.name));
+      const found = skeletonFor(file.name);
+      if (!found) throw new Error(`no skeleton for ${file.name}: load its .asx / .asf too`);
+      return amcClip(await file.text(), file.name, found.name, found.skel, found.matched);
     }
     case 'c3d':
       return prepareClip(parseC3d(await file.arrayBuffer(), file.name));
