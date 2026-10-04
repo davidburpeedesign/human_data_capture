@@ -24,6 +24,8 @@
   --mx-data-blue:   #4698c7;
   --data-left:      var(--mx-data-red);
   --data-right:     var(--mx-data-blue);
+  /* Magnitude-encoded colour (force strips, vector magnitude) uses the
+     diverging ramp in src/core/colormap.ts, which contains these two. */
 
   /* Bone alpha ramp */
   --mx-bone-04: rgba(228,227,223,0.04);

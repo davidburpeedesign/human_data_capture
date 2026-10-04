@@ -148,6 +148,29 @@ missing). Nothing is silently guessed.
 | **gait variability** | CV % of stride time, stride length, contact, swing, step width | ≥ 3 strides |
 | **left/right coordination** | inter-limb phase, phase coordination index (Plotnik 2007), symmetry indices | both sides |
 
+### 6.2b Ground reaction force, estimated (`analysis/grf.ts`)
+
+No force plates needed: total GRF is Newton's second law on the whole-body
+COM, **F = m (a_com − g)**, reported in body weights (×BW), so body mass
+cancels out. Single support gives the whole force to the stance foot. Double
+support is indeterminate; we use the smooth transition assumption (Ren et
+al. 2008), with the trailing foot's share easing from 1 at the leading heel
+strike to 0 at its own toe-off (cubic, flat ends). The centre of pressure is
+a display anchor rolling heel → toe over stance.
+
+| metric | definition |
+|---|---|
+| vertical peaks (loading / push-off) | max vertical force in the first / second half of stance |
+| midstance minimum | min vertical force between the two peaks |
+| loading rate | 20–80 % of the first peak, BW/s |
+| peak braking / propulsion | min / max anterior force in stance |
+| peak medial | max medially directed force in stance |
+
+Curves: vertical, anterior (+) / posterior (−), medial (+) / lateral (−),
+per foot, in the walker's frame. Status is `ok` with a segmental COM and
+`proxy` with the pelvis stand-in. Checks: over whole strides the estimate
+averages 1.0 BW vertically and ~0 fore-aft (0.99 BW on CMU 07_01).
+
 Also produced: hip/knee/ankle angles in all three planes, cycle-normalised
 mean ± sd curves (101 samples) per limb.
 
@@ -179,9 +202,18 @@ the double pass), 6 Hz default, adjustable in the sidebar.
 
 Visual rules, from the MORPHXGEN language: `#222` void, bone ink, hairline
 grids, square corners, corner-tick frame on the stage, all lowercase. Coral
-is an indicator only (active item, playhead, current COM, focus). Limb data
-colours (`--data-left` blue, `--data-right` amber) appear only on data marks
-and were validated for dark-surface contrast and colour-vision separation.
+is an indicator only (active item, current COM, focus); the timeline
+playhead is white because coral sits too close to the left-limb red. Limb
+data colours (`--data-left` red #EA5A65, `--data-right` blue #4698C7) appear
+only on data marks and were validated for dark-surface contrast and
+colour-vision separation.
+
+**Magnitude ramp** (`core/colormap.ts`): anything whose colour encodes "how
+much" uses one diverging ramp around a near-black zero, mint → blue → navy →
+black → maroon → red → blush. The limb colours sit inside it, so a per-side
+magnitude runs from black (nothing; fuses with the void) toward that side's
+own hue. Used by the GRF arrows (|F|, full scale 1.5 ×BW), the HUD legend
+and the per-foot force strips on the stance timeline.
 
 ---
 
@@ -209,7 +241,8 @@ exports, synthetic data, tests.
 **v1: real-data hardening**
 - validate against Vicon Nexus / Visual3D outputs on public datasets
   (e.g. CMU mocap, Fukuchi 2018 running/walking set)
-- C3D analog: force plates → true contact/loading from GRF, COP path
+- C3D analog: force plates → measured GRF/COP, replacing the estimate
+  and giving it a validation reference
 - TRC, glTF/FBX animation import
 - per-pass segmentation for walk-out-and-back trials (headings already
   follow curves; sharp 180° turns still produce a few odd steps)
@@ -243,5 +276,10 @@ exports, synthetic data, tests.
   rotation; it is reported `unavailable` (`meta.knee_axial = 'locked'`).
   Tibial rotation, which comes from the hip, is still measured.
 - Foot progression from a skeleton is only as good as the fit's foot yaw.
+- Estimated GRF comes from a twice-differentiated COM, so mid-stance carries
+  ripple a force plate would not show. The double-support split shares one
+  force between both feet, so per-foot fore-aft and especially mediolateral
+  forces in double support are approximate (their sum is not). With a
+  pelvis-proxy COM, arm and trunk motion is missing from the estimate.
 - The synthetic walker is a test fixture, not normative data. Its joint
   curves are plausible but not a reference gait.

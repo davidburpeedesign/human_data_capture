@@ -8,6 +8,7 @@ export interface Layers {
   footprints: boolean;
   grid: boolean;
   follow: boolean;
+  grf: boolean;
 }
 
 interface Props {

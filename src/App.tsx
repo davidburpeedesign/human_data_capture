@@ -23,6 +23,7 @@ const DEFAULT_LAYERS: Layers = {
   footprints: true,
   grid: true,
   follow: true,
+  grf: true,
 };
 
 export function App() {

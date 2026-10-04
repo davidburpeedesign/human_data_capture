@@ -6,6 +6,7 @@
 import { useEffect, useRef } from 'react';
 import type { MotionClip } from '../core/types';
 import type { GaitReport } from '../analysis/report';
+import { GRF_FULL_SCALE, rgbCss, sideMagnitude } from '../core/colormap';
 
 interface Props {
   clip: MotionClip;
@@ -36,7 +37,10 @@ export function Timeline({ clip, report, frame, playing, speed, onFrame, onPlay,
 
     const x = (f: number) => (f / (clip.frameCount - 1)) * w;
     const rowH = 10;
-    const rows = { left: 10, right: 28 };
+    const rows = { left: 6, right: 26 };
+    // Force strip under each stance row: per-frame |GRF| on the magnitude
+    // ramp, black (no load) toward the foot's own hue.
+    const stripH = 4;
 
     // Seconds grid.
     ctx.strokeStyle = css('--line-soft');
@@ -62,6 +66,15 @@ export function Timeline({ clip, report, frame, playing, speed, onFrame, onPlay,
         const end = t ?? h0;
         // 2px surface gap between consecutive stance bars.
         ctx.fillRect(x(h0) + 1, y, Math.max(1, x(end) - x(h0) - 2), rowH);
+      }
+      if (report.grf) {
+        const F = report.grf.foot[side];
+        const step = Math.max(1, Math.floor(clip.frameCount / w));
+        for (let f = 0; f < clip.frameCount; f += step) {
+          const mag = Math.hypot(F[f][0], F[f][1], F[f][2]);
+          ctx.fillStyle = rgbCss(sideMagnitude(side, mag / GRF_FULL_SCALE));
+          ctx.fillRect(x(f), y + rowH + 1, Math.max(1, x(f + step) - x(f) + 0.5), stripH);
+        }
       }
     }
 

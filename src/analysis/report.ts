@@ -9,6 +9,7 @@ import type { MotionClip, Side, Vec3 } from '../core/types';
 import { cv, derivative, ensemble, mean, range, resample, std } from '../core/signal';
 import { computeAngles, type SideAngles } from './angles';
 import { computeCom } from './com';
+import { estimateGrf, type GrfResult } from './grf';
 import { createContext, type AnalysisOptions } from './context';
 import { detectEvents, rightOf, type Events, type Stride } from './events';
 import { buildSegments, type Quality } from './segments';
@@ -59,6 +60,8 @@ export interface GaitReport {
   groups: MetricGroup[];
   curves: Curve[];
   com: { path: Vec3[]; method: string } | null;
+  /** Estimated ground reaction force (×BW); null without a COM estimate. */
+  grf: GrfResult | null;
   angles: Record<Side, SideAngles>;
   warnings: string[];
 }
@@ -75,7 +78,7 @@ const symmetry = (l?: Stat, r?: Stat) =>
 
 // A ratio index is meaningless for signed quantities that cross zero
 // (angles, angular velocity); those show the raw l/r values only.
-const RATIO_UNITS = new Set(['m', 's', 'ms', '% cycle', 'm/s']);
+const RATIO_UNITS = new Set(['m', 's', 'ms', '% cycle', 'm/s', '×BW', 'BW/s']);
 
 const status = (q: Quality | undefined): MetricStatus => (q === undefined ? 'unavailable' : q === 'proxy' ? 'proxy' : 'ok');
 
@@ -277,6 +280,62 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     ],
   };
 
+  // ── ground reaction force (estimated) ─────────────────────────────────
+  const grf = com ? estimateGrf(ctx, events, com) : null;
+  /**
+   * Per-foot GRF in the walker's frame: vertical, anterior (propulsive +)
+   * and medial (+, toward the body's midline for that foot).
+   */
+  const grfAxes = (side: Side) => {
+    const s = side === 'right' ? 1 : -1;
+    const F = grf?.foot[side] ?? [];
+    return {
+      v: F.map((f) => f[1]),
+      ap: F.map((f, i) => f[0] * events.heading[i][0] + f[2] * events.heading[i][2]),
+      ml: F.map((f, i) => {
+        const r = rightOf(events.heading[i]);
+        return -s * (f[0] * r[0] + f[2] * r[2]);
+      }),
+    };
+  };
+  const grfSide = { left: grfAxes('left'), right: grfAxes('right') };
+  const grfStatus: MetricStatus = !grf ? 'unavailable' : grf.method === 'segmental com' ? 'ok' : 'proxy';
+  const perStance = (axis: 'v' | 'ap' | 'ml', fn: (w: number[], st: Stride) => number) => {
+    const out: Record<Side, number[]> = { left: [], right: [] };
+    if (!grf) return out;
+    for (const side of SIDES) for (const st of strides(side)) out[side].push(fn(grfSide[side][axis].slice(st.hs, st.to + 1), st));
+    return out;
+  };
+  const half = (w: number[], which: 0 | 1) => (which === 0 ? w.slice(0, Math.ceil(w.length / 2)) : w.slice(Math.floor(w.length / 2)));
+  // Loading rate: 20 % → 80 % of the first vertical peak (a standard
+  // definition that avoids the noisy contact instant).
+  const loadingRate = (w: number[]) => {
+    const first = half(w, 0);
+    const peak = Math.max(...first);
+    const k = first.indexOf(peak);
+    const i20 = first.findIndex((x) => x >= 0.2 * peak);
+    const i80 = first.findIndex((x) => x >= 0.8 * peak);
+    return i80 > i20 && k > 0 ? ((0.6 * peak) / (i80 - i20)) * ctx.rate : NaN;
+  };
+  const grfNote = grf ? `estimated from ${grf.method} acceleration` : undefined;
+  const grfGroup: MetricGroup = {
+    id: 'grf',
+    label: 'ground reaction force (estimated)',
+    metrics: [
+      sided('grfPeak1', 'vertical peak (loading)', '×BW', perStance('v', (w) => Math.max(...half(w, 0))), grfStatus, grfNote),
+      sided('grfValley', 'vertical midstance minimum', '×BW', perStance('v', (w) => {
+        const a = w.indexOf(Math.max(...half(w, 0)));
+        const b = Math.floor(w.length / 2) + half(w, 1).indexOf(Math.max(...half(w, 1)));
+        return b > a ? Math.min(...w.slice(a, b + 1)) : NaN;
+      }), grfStatus, grfNote),
+      sided('grfPeak2', 'vertical peak (push-off)', '×BW', perStance('v', (w) => Math.max(...half(w, 1))), grfStatus, grfNote),
+      sided('grfLoadingRate', 'loading rate', 'BW/s', perStance('v', (w) => loadingRate(w)), grfStatus, '20–80 % of first peak'),
+      sided('grfBraking', 'peak braking', '×BW', perStance('ap', (w) => -Math.min(...w)), grfStatus, grfNote),
+      sided('grfPropulsion', 'peak propulsion', '×BW', perStance('ap', (w) => Math.max(...w)), grfStatus, grfNote),
+      sided('grfMedial', 'peak medial', '×BW', perStance('ml', (w) => Math.max(...w)), grfStatus, grfNote),
+    ],
+  };
+
   // ── variability ──────────────────────────────────────────────────────
   const cvSided = (id: string, label: string, k: keyof StrideParams): Metric => {
     const l = pick(k).left.filter(Number.isFinite), r = pick(k).right.filter(Number.isFinite);
@@ -350,6 +409,9 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     curve('fpa', 'foot progression', 'deg', series('fpa'), q('fpa')),
     curve('comY', 'com height', 'cm',
       { left: com?.path.map((p) => p[1] * 100), right: com?.path.map((p) => p[1] * 100) }, comStatus),
+    curve('grfV', 'grf vertical', '×BW', grf ? { left: grfSide.left.v, right: grfSide.right.v } : { left: undefined, right: undefined }, grfStatus),
+    curve('grfAP', 'grf anterior (+) / posterior (−)', '×BW', grf ? { left: grfSide.left.ap, right: grfSide.right.ap } : { left: undefined, right: undefined }, grfStatus),
+    curve('grfML', 'grf medial (+) / lateral (−)', '×BW', grf ? { left: grfSide.left.ml, right: grfSide.right.ml } : { left: undefined, right: undefined }, grfStatus),
   ];
 
   return {
@@ -357,9 +419,10 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     overground,
     events,
     strides: sp,
-    groups: [spatio, loading, footAnkle, pronation, rotation, comGroup, variability, coordination],
+    groups: [spatio, loading, footAnkle, pronation, rotation, comGroup, grfGroup, variability, coordination],
     curves,
     com,
+    grf,
     angles,
     warnings,
   };
