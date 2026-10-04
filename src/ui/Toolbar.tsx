@@ -1,4 +1,5 @@
 import { ACCEPT } from '../io/index';
+import { Logo } from './Logo';
 
 interface Props {
   name: string | null;
@@ -16,7 +17,7 @@ export function Toolbar({ name, readout, status, busy, canExport, canExportStrid
   return (
     <header className="toolbar">
       <div className="toolbar__brand">
-        <span className="wordmark">MORPHXGEN</span>
+        <span className="wordmark"><Logo className="wordmark__logo" />MORPHXGEN</span>
         <span className="toolbar__tool">human_data_capture</span>
       </div>
 

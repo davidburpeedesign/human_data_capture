@@ -1,6 +1,7 @@
 import type { GaitReport } from '../analysis/report';
 import type { Side } from '../core/types';
 import { mean } from '../core/signal';
+import { rgbCss, sideMagnitude } from '../core/colormap';
 import { CycleChart } from './charts/CycleChart';
 
 /** Where `frame` falls in each limb's current stride, as % of cycle. */
@@ -22,15 +23,16 @@ export function CurvesPanel({ report, frame }: { report: GaitReport; frame: numb
     const partial = st.filter((x) => x.partial).length;
     return `${st.length - partial}${partial ? ` + ${partial} partial` : ''}`;
   };
+  const ramp = (s: Side) => `linear-gradient(90deg, ${rgbCss(sideMagnitude(s, 0.3))}, ${rgbCss(sideMagnitude(s, 1))})`;
   return (
     <div className="curves">
       <p className="curves__legend">
-        <span><i style={{ background: 'var(--data-left)' }} /> left (n={strides('left')})</span>
-        <span><i style={{ background: 'var(--data-right)' }} /> right (n={strides('right')})</span>
-        <span className="muted">mean ± 1 sd · % gait cycle</span>
+        <span><i className="swatch--ramp" style={{ background: ramp('left') }} /> left (n={strides('left')})</span>
+        <span><i className="swatch--ramp" style={{ background: ramp('right') }} /> right (n={strides('right')})</span>
+        <span className="muted">mean ± 1 sd · % gait cycle · line shade: low → high per chart (grf: 0 → peak)</span>
       </p>
       {report.curves.map((c) => (
-        <CycleChart key={c.id} curve={c} cursor={cursor} toeOff={toeOff} />
+        <CycleChart key={c.id} curve={c} cursor={cursor} toeOff={toeOff} zeroBased={c.unit === '×BW'} />
       ))}
     </div>
   );

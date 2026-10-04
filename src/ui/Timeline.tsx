@@ -3,10 +3,10 @@
  * the limb's data colour, so double support reads as overlap at a glance.
  * Click or drag anywhere on the track to scrub.
  */
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { MotionClip } from '../core/types';
 import type { GaitReport } from '../analysis/report';
-import { GRF_FULL_SCALE, rgbCss, sideMagnitude } from '../core/colormap';
+import { grfFullScale, rgbCss, sideMagnitude } from '../core/colormap';
 
 interface Props {
   clip: MotionClip;
@@ -24,6 +24,7 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 export function Timeline({ clip, report, frame, playing, speed, onFrame, onPlay, onSpeed }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const dragging = useRef(false);
+  const grfFull = useMemo(() => (report?.grf ? grfFullScale(report.grf.foot) : 0), [report]);
 
   useEffect(() => {
     const c = canvas.current!;
@@ -72,7 +73,7 @@ export function Timeline({ clip, report, frame, playing, speed, onFrame, onPlay,
         const step = Math.max(1, Math.floor(clip.frameCount / w));
         for (let f = 0; f < clip.frameCount; f += step) {
           const mag = Math.hypot(F[f][0], F[f][1], F[f][2]);
-          ctx.fillStyle = rgbCss(sideMagnitude(side, mag / GRF_FULL_SCALE));
+          ctx.fillStyle = rgbCss(sideMagnitude(side, mag / grfFull));
           ctx.fillRect(x(f), y + rowH + 1, Math.max(1, x(f + step) - x(f) + 0.5), stripH);
         }
       }
@@ -82,7 +83,7 @@ export function Timeline({ clip, report, frame, playing, speed, onFrame, onPlay,
     // left-stance red to read as a separate mark on this track.
     ctx.fillStyle = css('--text-emphasis');
     ctx.fillRect(Math.round(x(frame)) - 1, 0, 2, h);
-  }, [clip, report, frame]);
+  }, [clip, report, frame, grfFull]);
 
   const scrub = (e: React.PointerEvent) => {
     const r = canvas.current!.getBoundingClientRect();

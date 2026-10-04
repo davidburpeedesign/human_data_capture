@@ -5,9 +5,15 @@
  * Canvas, not SVG, because a dozen of these redraw on every playback frame.
  * Grid and axes are recessive bone hairlines; only data marks carry colour,
  * and text never wears the series colour.
+ *
+ * Each mean line is shaded by its value on the magnitude ramp, the same
+ * scheme as the GRF arrows and force strips: dim near the low end, toward
+ * the limb's own hue and past it at the high end. Left stays warm and right
+ * cool, so the limbs are still told apart by hue.
  */
 import { useEffect, useRef, useState } from 'react';
 import type { Curve } from '../../analysis/report';
+import { rgbCss, sideMagnitude } from '../../core/colormap';
 
 interface Props {
   curve: Curve;
@@ -15,7 +21,22 @@ interface Props {
   cursor?: { left?: number; right?: number };
   toeOff?: number;
   height?: number;
+  /**
+   * For quantities with a true zero (force, ×BW): shade by |v| over the
+   * chart's largest |v|, so zero is darkest. Otherwise the line is shaded
+   * over the chart's own range, low to high, since a joint angle's zero is
+   * a convention, not "none". Either way each chart uses the whole ramp: a
+   * scale shared across charts left the small fore-aft and mediolateral
+   * forces in one dark shade.
+   */
+  zeroBased?: boolean;
 }
+
+/**
+ * Lowest ramp position a line is drawn at: the ramp's true zero is near-black
+ * and would vanish into the plot surface, so a curve keeps a visible floor.
+ */
+const LINE_FLOOR = 0.3;
 
 const css = (name: string) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
@@ -43,7 +64,7 @@ function runs(v: number[]): [number, number][] {
   return out;
 }
 
-export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
+export function CycleChart({ curve, cursor, toeOff, height = 132, zeroBased }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState(0);
@@ -57,6 +78,14 @@ export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
       lo = Math.min(lo, m - sd[i]); hi = Math.max(hi, m + sd[i]);
     });
   }
+  // Range of the means alone (not the sd band), for value shading.
+  let vLo = Infinity, vHi = -Infinity;
+  for (const s of series) for (const m of curve[s]!.mean) if (Number.isFinite(m)) { vLo = Math.min(vLo, m); vHi = Math.max(vHi, m); }
+  const vAbs = Math.max(Math.abs(vLo), Math.abs(vHi));
+  const shade = (v: number) => {
+    const t = zeroBased ? Math.abs(v) / (vAbs || 1) : (v - vLo) / (vHi - vLo || 1);
+    return LINE_FLOOR + (1 - LINE_FLOOR) * Math.max(0, Math.min(1, t));
+  };
   const padY = (hi - lo) * 0.08 || 1;
   lo -= padY; hi += padY;
 
@@ -132,7 +161,13 @@ export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
         ctx.fill();
       }
       ctx.globalAlpha = 1;
-      ctx.strokeStyle = color;
+      // x is monotonic in the sample index, so a horizontal gradient with a
+      // stop per sample shades the whole line by value in one stroke.
+      const grad = ctx.createLinearGradient(X(0), 0, X(mean.length - 1), 0);
+      mean.forEach((m, i) => {
+        if (Number.isFinite(m)) grad.addColorStop(i / (mean.length - 1), rgbCss(sideMagnitude(s, shade(m))));
+      });
+      ctx.strokeStyle = grad;
       ctx.lineWidth = 2;
       ctx.beginPath();
       for (const [a, b] of runs(mean)) {
@@ -145,7 +180,7 @@ export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
       const cur = cursor?.[s];
       if (cur !== undefined && Number.isFinite(mean[Math.round(cur)])) {
         const i = Math.round(cur);
-        ctx.fillStyle = color;
+        ctx.fillStyle = rgbCss(sideMagnitude(s, shade(mean[i])));
         ctx.strokeStyle = css('--bg-deep');
         ctx.lineWidth = 2;
         ctx.beginPath(); ctx.arc(X(i), Y(mean[i]), 4, 0, Math.PI * 2); ctx.fill(); ctx.stroke();

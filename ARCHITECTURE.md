@@ -150,7 +150,7 @@ missing). Nothing is silently guessed.
 |---|---|---|
 | **stride length** | heel displacement between ipsilateral strikes (overground); step + next contralateral step (treadmill); or belt speed × stride time | heels, pelvis |
 | **cadence** | 60 / mean step time (steps/min) | heels, pelvis |
-| **foot progression angle** | heel→toe heading vs. direction of travel, mean over foot-flat → heel-off; toe-out + | heel, toe |
+| **foot progression angle** | heel→toe heading vs. direction of travel, mean over foot-flat → heel-off; toe-out +. The curve leaves out frames where the foot axis is >60° off the direction of travel (running swing, heel kicked up), where a heading would wrap ±180° | heel, toe |
 | **pronation / supination** | ankle-complex frontal angle (foot vs. shank, inversion +): peak eversion, eversion excursion, time to peak, peak eversion velocity; heuristic pattern label | + MT1/MT5 and malleoli for `ok`, else `proxy` |
 | **ankle excursion** | sagittal ankle ROM in stance and full cycle; peak dorsi/plantarflexion | knee, ankle, heel, toe |
 | **tibial rotation** | shank axial rotation in the lab, ROM and mean in stance; internal + | malleoli med/lat |

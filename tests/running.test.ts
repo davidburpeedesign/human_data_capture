@@ -69,3 +69,16 @@ describe('ensemble with partial curves', () => {
     expect(Number.isNaN(ensemble([[NaN], [NaN]]).mean[0])).toBe(true);
   });
 });
+
+describe('foot progression in running swing', () => {
+  it('leaves frames where the foot points backward out instead of wrapping ±180°', () => {
+    const fpa = run.curves.find((c) => c.id === 'fpa')!;
+    for (const side of ['left', 'right'] as const) {
+      const finite = fpa[side]!.mean.filter(Number.isFinite);
+      expect(finite.length, side).toBeGreaterThan(20);
+      expect(Math.max(...finite.map(Math.abs)), side).toBeLessThan(60);
+    }
+    // Stance, where the metric is taken, is untouched.
+    expect(Number.isFinite(metric(run, 'fpa').right!.mean)).toBe(true);
+  });
+});
