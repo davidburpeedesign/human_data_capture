@@ -61,13 +61,13 @@ button, input, select, label { font: inherit; letter-spacing: inherit; color: in
   text-transform: uppercase;
   font-size: var(--fs-label);
 }
-/* Cap height of Montserrat (~0.7em), sitting on the baseline, so the mark
-   spans exactly the letters' height. */
+/* 1.2em, about 1.7× the cap height (~0.7em), centred on the capitals:
+   dropped below the baseline by half the difference, (0.7 − 1.2) / 2. */
 .wordmark__logo {
-  height: 0.7em;
+  height: 1.2em;
   width: auto;
   margin-right: 0.6em;
-  vertical-align: baseline;
+  vertical-align: -0.25em;
 }
 
 .toolbar__tool { color: var(--text-faint); font-size: var(--fs-micro); }
