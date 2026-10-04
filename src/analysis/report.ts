@@ -9,7 +9,7 @@ import type { MotionClip, Side, Vec3 } from '../core/types';
 import { cv, derivative, ensemble, mean, range, resample, std } from '../core/signal';
 import { computeAngles, type SideAngles } from './angles';
 import { computeCom } from './com';
-import { estimateGrf, type GrfResult } from './grf';
+import { contactSeries, estimateGrf, type GrfResult } from './grf';
 import { createContext, type AnalysisOptions } from './context';
 import { detectEvents, rightOf, type Events, type Stride } from './events';
 import { buildSegments, type Quality } from './segments';
@@ -55,6 +55,8 @@ export interface Curve {
 export interface GaitReport {
   clipId: string;
   overground: boolean;
+  /** Running if flight phases (neither foot on the ground) take up >5 % of the trial. */
+  mode: 'walking' | 'running';
   events: Events;
   strides: StrideParams[];
   groups: MetricGroup[];
@@ -134,6 +136,20 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
   const travel = pel ? Math.hypot(pel[pel.length - 1][0] - pel[0][0], pel[pel.length - 1][2] - pel[0][2]) : 0;
   const overground = travel > 1 || mean(events.speed) > 0.3;
 
+  // Walking always has a foot down; running has flight phases. Only frames
+  // between the first and last detected event are judged, since contact
+  // before the first event is inferred.
+  const evFrames = [...events.heelStrikes.left, ...events.heelStrikes.right, ...events.toeOffs.left, ...events.toeOffs.right];
+  let mode: 'walking' | 'running' = 'walking';
+  if (evFrames.length >= 3) {
+    const cl = contactSeries(ctx.n, events.heelStrikes.left, events.toeOffs.left);
+    const cr = contactSeries(ctx.n, events.heelStrikes.right, events.toeOffs.right);
+    const a = Math.min(...evFrames), b = Math.max(...evFrames);
+    let flight = 0;
+    for (let i = a; i <= b; i++) if (!cl[i] && !cr[i]) flight++;
+    if (flight / (b - a + 1) > 0.05) mode = 'running';
+  }
+
   const sp = strideParams(ctx, events, overground);
   const strides = (side: Side) => events.strides.filter((s) => s.side === side);
   const spOf = (side: Side) => sp.filter((s) => s.side === side);
@@ -155,10 +171,13 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     return qs.length ? status(qs.includes('proxy') ? 'proxy' : 'full') : 'unavailable';
   };
   const stance = (v: number[], st: Stride) => v.slice(st.hs, st.to + 1);
-  const cycle = (v: number[], st: Stride) => v.slice(st.hs, st.next + 1);
+  // Whole-cycle measures need the real next heel strike; NaN drops a
+  // partial stride from the statistic.
+  const cycle = (v: number[], st: Stride) => (st.partial ? [NaN] : v.slice(st.hs, st.next + 1));
 
   // ── spatiotemporal ───────────────────────────────────────────────────
-  const strideTimes = sp.map((s) => s.strideTime);
+  // Partial strides have no stride time; leave them out of the average.
+  const strideTimes = sp.map((s) => s.strideTime).filter(Number.isFinite);
   const strideLens = sp.map((s) => s.strideLength).filter(Number.isFinite);
   const speed = ctx.opts.treadmillSpeed ?? (strideLens.length ? mean(strideLens) / mean(strideTimes) : NaN);
   const allHs = [...events.heelStrikes.left, ...events.heelStrikes.right].sort((a, b) => a - b);
@@ -168,7 +187,7 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     id: 'spatiotemporal',
     label: 'spatiotemporal',
     metrics: [
-      { id: 'speed', label: 'walking speed', unit: 'm/s', both: stat([speed]), status: Number.isFinite(speed) ? 'ok' : 'unavailable' },
+      { id: 'speed', label: 'speed', unit: 'm/s', both: stat([speed]), status: Number.isFinite(speed) ? 'ok' : 'unavailable' },
       { id: 'cadence', label: 'cadence', unit: 'steps/min', both: stat(stepTimes.map((t) => 60 / t)), status: stepTimes.length ? 'ok' : 'unavailable' },
       sided('strideLength', 'stride length', 'm', pick('strideLength'), 'ok', overground ? undefined : 'treadmill: sum of consecutive steps'),
       sided('stepLength', 'step length', 'm', pick('stepLength'), 'ok'),
@@ -185,10 +204,12 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     id: 'loading',
     label: 'loading / unloading',
     metrics: [
-      sided('loading', 'loading response', 'ms', pick('loadingTime', 1000), 'ok', 'heel strike → contralateral toe off'),
+      sided('loading', 'loading response', 'ms', pick('loadingTime', 1000), 'ok',
+        mode === 'running' ? 'no double support when running' : 'heel strike → contralateral toe off'),
       sided('footFlat', 'time to foot flat', 'ms', pick('footFlatTime', 1000), 'ok'),
       sided('heelOff', 'time to heel off', 'ms', pick('heelOffTime', 1000), 'ok'),
-      sided('unloading', 'unloading (pre-swing)', 'ms', pick('unloadingTime', 1000), 'ok', 'contralateral heel strike → toe off'),
+      sided('unloading', 'unloading (pre-swing)', 'ms', pick('unloadingTime', 1000), 'ok',
+        mode === 'running' ? 'no double support when running' : 'contralateral heel strike → toe off'),
     ],
   };
 
@@ -263,7 +284,8 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
   const comPer = (axis: 'vertical' | 'lateral') => {
     const out: number[] = [];
     if (!com) return out;
-    for (const st of strides('right').length ? strides('right') : strides('left')) {
+    const full = (side: Side) => strides(side).filter((st) => !st.partial);
+    for (const st of full('right').length ? full('right') : full('left')) {
       const right = rightOf(events.heading[Math.round((st.hs + st.next) / 2)]);
       const seg = com.path.slice(st.hs, st.next + 1);
       out.push(range(seg.map((p) => (axis === 'vertical' ? p[1] : p[0] * right[0] + p[2] * right[2]))));
@@ -359,7 +381,7 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
   // Phase coordination index (Plotnik et al. 2007): where in each left
   // stride the right heel strikes, ideally exactly half way (180°).
   const phases: number[] = [];
-  for (const st of strides('left')) {
+  for (const st of strides('left').filter((x) => !x.partial)) {
     const r = events.heelStrikes.right.find((h) => h > st.hs && h < st.next);
     if (r !== undefined) phases.push((360 * (r - st.hs)) / (st.next - st.hs));
   }
@@ -417,6 +439,7 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
   return {
     clipId: clip.id,
     overground,
+    mode,
     events,
     strides: sp,
     groups: [spatio, loading, footAnkle, pronation, rotation, comGroup, grfGroup, variability, coordination],

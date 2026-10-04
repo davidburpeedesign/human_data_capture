@@ -31,6 +31,18 @@ function niceTicks(lo: number, hi: number, count = 4): number[] {
 
 const PAD = { l: 34, r: 8, t: 8, b: 18 };
 
+/** Inclusive [start, end] index runs of finite values. */
+function runs(v: number[]): [number, number][] {
+  const out: [number, number][] = [];
+  let start = -1;
+  v.forEach((x, i) => {
+    if (Number.isFinite(x)) { if (start < 0) start = i; }
+    else if (start >= 0) { out.push([start, i - 1]); start = -1; }
+  });
+  if (start >= 0) out.push([start, v.length - 1]);
+  return out;
+}
+
 export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<number | null>(null);
@@ -40,7 +52,10 @@ export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
   let lo = Infinity, hi = -Infinity;
   for (const s of series) {
     const { mean, sd } = curve[s]!;
-    mean.forEach((m, i) => { lo = Math.min(lo, m - sd[i]); hi = Math.max(hi, m + sd[i]); });
+    mean.forEach((m, i) => {
+      if (!Number.isFinite(m)) return; // not covered (stride cut off by trial end)
+      lo = Math.min(lo, m - sd[i]); hi = Math.max(hi, m + sd[i]);
+    });
   }
   const padY = (hi - lo) * 0.08 || 1;
   lo -= padY; hi += padY;
@@ -96,20 +111,27 @@ export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
       const color = css(s === 'left' ? '--data-left' : '--data-right');
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.14;
-      ctx.beginPath();
-      mean.forEach((m, i) => ctx.lineTo(X(i), Y(m + sd[i])));
-      for (let i = mean.length - 1; i >= 0; i--) ctx.lineTo(X(i), Y(mean[i] - sd[i]));
-      ctx.fill();
+      // Band and line over each covered run only: a partial stride stops
+      // where the trial did, rather than dropping to zero or bridging a gap.
+      for (const [a, b] of runs(mean)) {
+        ctx.beginPath();
+        for (let i = a; i <= b; i++) ctx.lineTo(X(i), Y(mean[i] + sd[i]));
+        for (let i = b; i >= a; i--) ctx.lineTo(X(i), Y(mean[i] - sd[i]));
+        ctx.fill();
+      }
       ctx.globalAlpha = 1;
       ctx.strokeStyle = color;
       ctx.lineWidth = 2;
       ctx.beginPath();
-      mean.forEach((m, i) => (i ? ctx.lineTo(X(i), Y(m)) : ctx.moveTo(X(i), Y(m))));
+      for (const [a, b] of runs(mean)) {
+        ctx.moveTo(X(a), Y(mean[a]));
+        for (let i = a + 1; i <= b; i++) ctx.lineTo(X(i), Y(mean[i]));
+      }
       ctx.stroke();
       ctx.lineWidth = 1;
 
       const cur = cursor?.[s];
-      if (cur !== undefined) {
+      if (cur !== undefined && Number.isFinite(mean[Math.round(cur)])) {
         const i = Math.round(cur);
         ctx.fillStyle = color;
         ctx.strokeStyle = css('--bg-deep');
@@ -133,7 +155,7 @@ export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
     setHoverX(e.clientX - r.left);
   };
 
-  const fmt = (v: number) => v.toFixed(1);
+  const fmt = (v: number) => (Number.isFinite(v) ? v.toFixed(1) : '–');
 
   return (
     <figure className="chart">

@@ -46,7 +46,7 @@ const ease = (u: number) => {
 };
 
 /** Per-frame contact from heel strikes / toe offs, inferring the state before the first event. */
-function contactSeries(n: number, hs: number[], to: number[]): boolean[] {
+export function contactSeries(n: number, hs: number[], to: number[]): boolean[] {
   const ev = [...hs.map((f) => [f, 1] as const), ...to.map((f) => [f, 0] as const)].sort((a, b) => a[0] - b[0]);
   const out = new Array<boolean>(n);
   // Before the first event the foot is in contact iff that first event is a toe off.

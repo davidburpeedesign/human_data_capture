@@ -73,6 +73,13 @@ stance, and a knee angle that matches the trial's own `ltibia` channel.
 Each metric reports left / right / pooled values and says when it is a
 proxy or unavailable because landmarks are missing.
 
+Walking and running are told apart automatically (flight phases). Short
+trials keep a stance that the recording cut off before the next heel strike
+as a *partial* stride: it feeds the stance metrics and draws its curve as
+far as the data goes, so a side is never left empty just because the trial
+ended early (CMU run `09_01` has one complete right stride and one partial
+left one; it is a test fixture).
+
 ## Exports
 
 - **export report**: JSON with every metric, per-stride rows and mean curves

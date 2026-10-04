@@ -118,7 +118,8 @@ export function resample(x: ArrayLike<number>, start: number, end: number, point
     const i0 = Math.floor(t);
     const i1 = Math.min(i0 + 1, x.length - 1);
     const f = t - i0;
-    out[i] = x[i0] * (1 - f) + x[i1] * f;
+    // Past the end of the data (a partial stride's estimated cycle): NaN.
+    out[i] = i0 < x.length ? x[i0] * (1 - f) + x[i1] * f : NaN;
   }
   return out;
 }
@@ -136,16 +137,21 @@ export const cv = (x: number[]) => (100 * std(x)) / Math.abs(mean(x));
 
 export const range = (x: number[]) => (x.length ? Math.max(...x) - Math.min(...x) : NaN);
 
-/** Point-wise mean ± sd across equal-length curves (cycle-normalised data). */
+/**
+ * Point-wise mean ± sd across equal-length curves (cycle-normalised data).
+ * NaN marks samples a curve does not cover (a stride cut off by the end of
+ * the trial); each point averages the curves that do cover it, and is NaN
+ * only where none does.
+ */
 export function ensemble(curves: number[][]): { mean: number[]; sd: number[] } {
   if (!curves.length) return { mean: [], sd: [] };
   const n = curves[0].length;
   const m = new Array<number>(n);
   const s = new Array<number>(n);
   for (let i = 0; i < n; i++) {
-    const col = curves.map((c) => c[i]);
-    m[i] = mean(col);
-    s[i] = curves.length > 1 ? std(col) : 0;
+    const col = curves.map((c) => c[i]).filter(Number.isFinite);
+    m[i] = col.length ? mean(col) : NaN;
+    s[i] = col.length > 1 ? std(col) : col.length ? 0 : NaN;
   }
   return { mean: m, sd: s };
 }

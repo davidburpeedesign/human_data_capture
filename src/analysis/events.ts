@@ -24,6 +24,14 @@ export interface Stride {
   /** Optional sub-phase events, NaN when not resolvable. */
   footFlat: number;
   heelOff: number;
+  /**
+   * The clip ended before the next ipsilateral heel strike: the stance is
+   * real, `next` is an estimate (typical stride length) and may lie past
+   * the last frame. Short trials, especially running, often hold only one
+   * complete stride per side or none, and dropping the final stance would
+   * leave a side with no data at all.
+   */
+  partial: boolean;
 }
 
 export interface Events {
@@ -113,7 +121,24 @@ export function detectEvents(ctx: Ctx): Events {
         to,
         next: hs[k + 1],
         ...subPhases(heel, toe, hs[k], to),
+        partial: false,
       });
+    }
+  }
+
+  // Trailing stances: the last heel strike of a side, with its toe-off in the
+  // clip but no following heel strike. Cycle length is estimated from the
+  // trial itself: a complete stride if there is one, else two steps.
+  const strideFrames = typicalStride(strides, heelStrikes);
+  if (strideFrames) {
+    for (const side of ['left', 'right'] as const) {
+      const heel = ctx.ps(side, 'HEEL') ?? ctx.ps(side, 'ANKLE_LAT');
+      const toe = ctx.ps(side, 'TOE') ?? heel;
+      const last = heelStrikes[side][heelStrikes[side].length - 1];
+      if (!heel || !toe || last === undefined) continue;
+      const to = toeOffs[side].find((t) => t > last);
+      if (to === undefined) continue;
+      strides.push({ side, hs: last, to, next: last + strideFrames, ...subPhases(heel, toe, last, to), partial: true });
     }
   }
 
@@ -177,4 +202,14 @@ function subPhases(heel: Vec3[], toe: Vec3[], hs: number, to: number) {
     if (ho >= 0) heelOff = hs + ho;
   }
   return { footFlat, heelOff };
+}
+
+/** Median stride length in frames, from complete strides or, failing that, steps. */
+function typicalStride(strides: Stride[], hs: Record<Side, number[]>): number | null {
+  const median = (x: number[]) => [...x].sort((a, b) => a - b)[x.length >> 1];
+  if (strides.length) return median(strides.map((s) => s.next - s.hs));
+  const all = [...hs.left.map((f) => [f, 0]), ...hs.right.map((f) => [f, 1])].sort((a, b) => a[0] - b[0]);
+  const steps: number[] = [];
+  for (let i = 1; i < all.length; i++) if (all[i][1] !== all[i - 1][1]) steps.push(all[i][0] - all[i - 1][0]);
+  return steps.length ? 2 * median(steps) : null;
 }
