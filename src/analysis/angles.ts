@@ -24,6 +24,13 @@ export interface AngleSeries {
 
 export type SideAngles = Record<string, AngleSeries>;
 
+/**
+ * Largest angle (rad) between the foot's long axis and the direction of
+ * travel for which a progression angle is reported. Generous: toe-out of
+ * 40° with the forefoot pitched 30° is still well inside.
+ */
+const FPA_MAX_TILT = (60 * Math.PI) / 180;
+
 const sgn = (side: Side) => (side === 'right' ? 1 : -1);
 
 const worst = (...q: Quality[]): Quality => (q.includes('proxy') ? 'proxy' : 'full');
@@ -84,12 +91,19 @@ export function computeAngles(segs: Segments, heading?: Vec3[]): Record<Side, Si
     }
 
     if (foot) {
-      // Heading of the foot's long axis on the ground plane vs. direction of travel.
+      // Heading of the foot's long axis on the ground plane vs. direction of
+      // travel. That heading only means something while the foot points
+      // forward: in running swing the heel kicks up toward the buttock, the
+      // axis tips through vertical and ends up pointing backward, and atan2
+      // reads that as ±180°. Once the axis is more than FPA_MAX_TILT from
+      // the direction of travel (pitch and yaw together) the frame is NaN, a
+      // gap in the curve, rather than a wrapped angle.
       a.fpa = {
         id: 'fpa',
         label: 'foot progression',
         values: foot.frames.map((f, i) => {
           const w = inWalker(f, i);
+          if (w[0] < Math.cos(FPA_MAX_TILT)) return NaN;
           return Math.atan2(s * w[6], w[0]) * DEG;
         }),
         quality: 'full',

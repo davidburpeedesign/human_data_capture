@@ -22,12 +22,14 @@ interface Props {
   toeOff?: number;
   height?: number;
   /**
-   * Value that maps to the top of the ramp, for quantities with a true zero
-   * (force, ×BW): shade by |v| / fullScale. Without it the line is shaded
+   * For quantities with a true zero (force, ×BW): shade by |v| over the
+   * chart's largest |v|, so zero is darkest. Otherwise the line is shaded
    * over the chart's own range, low to high, since a joint angle's zero is
-   * a convention, not "none".
+   * a convention, not "none". Either way each chart uses the whole ramp: a
+   * scale shared across charts left the small fore-aft and mediolateral
+   * forces in one dark shade.
    */
-  fullScale?: number;
+  zeroBased?: boolean;
 }
 
 /**
@@ -62,7 +64,7 @@ function runs(v: number[]): [number, number][] {
   return out;
 }
 
-export function CycleChart({ curve, cursor, toeOff, height = 132, fullScale }: Props) {
+export function CycleChart({ curve, cursor, toeOff, height = 132, zeroBased }: Props) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const [hover, setHover] = useState<number | null>(null);
   const [hoverX, setHoverX] = useState(0);
@@ -79,8 +81,9 @@ export function CycleChart({ curve, cursor, toeOff, height = 132, fullScale }: P
   // Range of the means alone (not the sd band), for value shading.
   let vLo = Infinity, vHi = -Infinity;
   for (const s of series) for (const m of curve[s]!.mean) if (Number.isFinite(m)) { vLo = Math.min(vLo, m); vHi = Math.max(vHi, m); }
+  const vAbs = Math.max(Math.abs(vLo), Math.abs(vHi));
   const shade = (v: number) => {
-    const t = fullScale ? Math.abs(v) / fullScale : (v - vLo) / (vHi - vLo || 1);
+    const t = zeroBased ? Math.abs(v) / (vAbs || 1) : (v - vLo) / (vHi - vLo || 1);
     return LINE_FLOOR + (1 - LINE_FLOOR) * Math.max(0, Math.min(1, t));
   };
   const padY = (hi - lo) * 0.08 || 1;
