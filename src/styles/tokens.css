@@ -1,0 +1,85 @@
+/**
+ * Tokens copied verbatim from MORPHXGEN-visual-language.md.
+ * That file is the source of truth — edit it there, mirror it here.
+ */
+
+:root {
+  /* Base */
+  --mx-void:        #222222;
+  --mx-void-deep:   #1a1a1a;
+  --mx-void-raise:  #2b2b2b;
+  --mx-bone:        #e4e3df;
+  --mx-white:       #ffffff;
+  --mx-gray:        #d9d9d9;
+
+  /* Signal accent — the ONLY accent */
+  --mx-coral:       #e48484;
+  --mx-coral-dim:   #b76a6a;
+
+  /* Data scheme — imagery and charts only, never UI chrome. Left/right
+     limb pair is the MORPHXGEN data blue/amber, nudged to pass the dark-
+     surface lightness, chroma and CVD-separation checks. */
+  --mx-data-blue:   #5a92d8;
+  --mx-data-amber:  #d6703f;
+  --data-left:      var(--mx-data-blue);
+  --data-right:     var(--mx-data-amber);
+
+  /* Bone alpha ramp */
+  --mx-bone-04: rgba(228,227,223,0.04);
+  --mx-bone-08: rgba(228,227,223,0.08);
+  --mx-bone-12: rgba(228,227,223,0.12);
+  --mx-bone-16: rgba(228,227,223,0.16);
+  --mx-bone-24: rgba(228,227,223,0.24);
+  --mx-bone-40: rgba(228,227,223,0.40);
+  --mx-bone-55: rgba(228,227,223,0.55);
+  --mx-bone-72: rgba(228,227,223,0.72);
+
+  /* Semantic aliases — author against THESE */
+  --bg:            var(--mx-void);
+  --bg-deep:       var(--mx-void-deep);
+  --surface-raise: var(--mx-void-raise);
+  --text-primary:  var(--mx-bone);
+  --text-emphasis: var(--mx-white);
+  --text-muted:    var(--mx-bone-55);
+  --text-faint:    var(--mx-bone-40);
+  --accent:        var(--mx-coral);
+  --accent-press:  var(--mx-coral-dim);
+  --line:          var(--mx-bone-16);
+  --line-soft:     var(--mx-bone-08);
+  --line-strong:   var(--mx-bone);
+  --focus-ring:    var(--mx-coral);
+
+  /* Type */
+  --font-display: "Space Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-mono:    "Intel One Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --font-sans:    "Montserrat", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  --fs-ui:    20px;
+  --fs-label: 16px;
+  --fs-micro: 14px;
+
+  --lh-tight: 1.0;  --lh-snug: 1.15;  --lh-body: 1.45;
+  --ls-wordmark: 0.10em;  --ls-ui: 0.04em;  --ls-body: -0.02em;
+
+  /* Spacing (8px base) */
+  --sp-1: 4px;  --sp-2: 8px;   --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 24px; --sp-6: 32px;  --sp-7: 48px; --sp-8: 64px;
+
+  /* Geometry */
+  --radius-0: 0px;
+  --radius-sm: 2px;
+  --bw-hair: 1px;
+  --bw-mark: 2px;
+  --border-hair: 1px solid var(--line);
+  --tick-len: 8px;
+  --nav-h: 64px;
+
+  /* Motion — mechanical, no bounce */
+  --ease-mech: cubic-bezier(0.65, 0, 0.35, 1);
+  --dur-fast: 120ms;  --dur-med: 240ms;
+
+  /* Status — readout only, always paired with a text label */
+  --status-ok:      var(--mx-bone-55);
+  --status-proxy:   #c9a23a;
+  --status-missing: var(--mx-bone-24);
+}
