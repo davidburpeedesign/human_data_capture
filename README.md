@@ -59,5 +59,15 @@ proxy or unavailable because landmarks are missing.
 ## Deploying
 
 Same as `mo_graph`: `.github/workflows/deploy.yml` builds and publishes to
-GitHub Pages on every push to `main`. Set **Settings → Pages → Source:
-GitHub Actions**.
+GitHub Pages on every push to `main`. The Pages source must be:
+
+> **Settings → Pages → Build and deployment → Source: GitHub Actions**
+
+**Not** "Deploy from a branch". That setting publishes the repo root, whose
+dev `index.html` loads `/src/main.tsx`, which no browser can execute: the
+symptom is a blank page whose source still shows `src="/src/main.tsx"`.
+
+Pages names each deployment after its commit. If a commit was ever served by
+the branch publisher, re-running the workflow on that *same* commit keeps
+serving the stale copy; push a new commit to `main` to get a fresh
+deployment.
