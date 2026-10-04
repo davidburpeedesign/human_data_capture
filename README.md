@@ -29,7 +29,9 @@ populated before you have data of your own.
 | motion capture | `.asx` / `.asf` + `.amc` · `.bvh` · `.c3d` · `.csv` / `.tsv` marker trajectories |
 | body scan | `.ply` · `.obj` · `.stl` (mesh or point cloud) |
 
-Drop files on the stage or use **open**. Units, up-axis and walking
+Drop files on the stage or use **open**. In the 3D view, the **ghost**
+layer draws every frame of the trial at once, translucent, like a long
+exposure; it is off by default and built on first use. Units, up-axis and walking
 direction are inferred from the body itself. Marker names are mapped to
 canonical landmarks (Plug-in Gait, CAST, Qualisys, the CMU marker set and
 mixamo/CMU joint names out of the box); the sidebar shows what resolved.

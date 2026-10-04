@@ -42,6 +42,8 @@ interface Stage {
   bones: THREE.LineSegments | null;
   comDot: THREE.Mesh | null;
   grfArrows: Record<Side, THREE.ArrowHelper> | null;
+  /** Every frame's skeleton + markers at once; built on first use. */
+  ghost: THREE.Group | null;
   comTrail: THREE.Line | null;
   footprints: THREE.Group | null;
   names: string[];
@@ -107,7 +109,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
 
     stage.current = {
       renderer, scene, camera, controls, grid, content,
-      markers: null, bones: null, comDot: null, comTrail: null, footprints: null, grfArrows: null,
+      markers: null, bones: null, comDot: null, comTrail: null, footprints: null, grfArrows: null, ghost: null,
       names: [], bonePairs: [], lastFollowX: NaN,
     };
 
@@ -145,7 +147,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     const s = stage.current;
     if (!s) return;
     disposeGroup(s.content);
-    Object.assign(s, { markers: null, bones: null, comDot: null, comTrail: null, footprints: null, grfArrows: null, names: [], bonePairs: [], lastFollowX: NaN });
+    Object.assign(s, { markers: null, bones: null, comDot: null, comTrail: null, footprints: null, grfArrows: null, ghost: null, names: [], bonePairs: [], lastFollowX: NaN });
     if (!dataset) return;
 
     const bone = new THREE.Color(css('--mx-bone'));
@@ -188,6 +190,17 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     s.controls.target.set(x0 + 0.3, 0.75, 0);
     s.camera.position.set(x0 + 2.2, 2.0, 3.9);
   }, [dataset]);
+
+  // ── ghost: the whole trial at once ───────────────────────────────────
+  useEffect(() => {
+    const s = stage.current;
+    if (!s || !dataset || dataset.kind !== 'motion') return;
+    if (layers.ghost && !s.ghost) {
+      s.ghost = ghostGroup(dataset, s.names, s.bonePairs);
+      s.content.add(s.ghost);
+    }
+    if (s.ghost) s.ghost.visible = layers.ghost;
+  }, [dataset, layers.ghost]);
 
   // ── report-derived overlays: com trail, footprints ───────────────────
   useEffect(() => {
@@ -353,5 +366,51 @@ function footprintGroup(clip: MotionClip, report: GaitReport): THREE.Group {
       color: css(side === 'left' ? '--data-left' : '--data-right'), transparent: true, opacity: 0.8,
     })));
   }
+  return g;
+}
+
+/**
+ * Every frame of the trial drawn at once, like a long exposure: one
+ * LineSegments for all bones of all frames and one Points for all markers,
+ * so even a 1200-frame trial is two draw calls.
+ *
+ * Additive blending in bone ink means places the body passes through often
+ * build up brighter. Opacity falls with frame count so a long trial reads as
+ * a translucent volume rather than a white blob. Gaps (NaN) are skipped:
+ * a non-finite vertex would poison the bounding sphere and cull the lot.
+ */
+function ghostGroup(clip: MotionClip, names: string[], bonePairs: [number, number][]): THREE.Group {
+  const g = new THREE.Group();
+  const n = clip.frameCount;
+  const tracks = names.map((name) => clip.trajectories.get(name)!.data);
+  const ok = (d: Float32Array, f: number) =>
+    Number.isFinite(d[f * 3]) && Number.isFinite(d[f * 3 + 1]) && Number.isFinite(d[f * 3 + 2]);
+
+  const bones: number[] = [];
+  const points: number[] = [];
+  for (let f = 0; f < n; f++) {
+    for (const [a, b] of bonePairs) {
+      const da = tracks[a], db = tracks[b];
+      if (!ok(da, f) || !ok(db, f)) continue;
+      bones.push(da[f * 3], da[f * 3 + 1], da[f * 3 + 2], db[f * 3], db[f * 3 + 1], db[f * 3 + 2]);
+    }
+    for (const d of tracks) if (ok(d, f)) points.push(d[f * 3], d[f * 3 + 1], d[f * 3 + 2]);
+  }
+
+  const bone = new THREE.Color(css('--mx-bone'));
+  // ~12 overlapping frames reach full ink; never fainter than 2 %.
+  const opacity = Math.min(0.35, Math.max(0.02, 12 / n));
+  const material = (kind: 'line' | 'point') => {
+    const common = { color: bone, transparent: true, opacity, blending: THREE.AdditiveBlending, depthWrite: false };
+    return kind === 'line'
+      ? new THREE.LineBasicMaterial(common)
+      : new THREE.PointsMaterial({ ...common, size: 2, sizeAttenuation: false });
+  };
+
+  const lg = new THREE.BufferGeometry();
+  lg.setAttribute('position', new THREE.Float32BufferAttribute(bones, 3));
+  const pg = new THREE.BufferGeometry();
+  pg.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+  g.add(new THREE.LineSegments(lg, material('line')), new THREE.Points(pg, material('point')));
   return g;
 }

@@ -24,6 +24,7 @@ const DEFAULT_LAYERS: Layers = {
   grid: true,
   follow: true,
   grf: true,
+  ghost: false,
 };
 
 export function App() {
@@ -126,7 +127,7 @@ export function App() {
     const seed = (Math.random() * 1e6) | 0;
     const d: Dataset = kind === 'motion'
       ? prepareClip({ ...syntheticWalk({ seed }), id: `synthetic-${seed}`, name: `synthetic_walk.${String(seed).slice(0, 3)}` })
-      : { ...syntheticScan(1.6 + Math.random() * 0.3), id: `scan-${seed}`, name: `synthetic_scan.${String(seed).slice(0, 3)}` };
+      : { ...syntheticScan(1.6 + Math.random() * 0.3, 1, seed), id: `scan-${seed}`, name: `synthetic_scan.${String(seed).slice(0, 3)}` };
     setDatasets((ds) => [...ds, d]);
     setActiveId(d.id);
   };
