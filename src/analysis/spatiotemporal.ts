@@ -42,7 +42,9 @@ export function strideParams(ctx: Ctx, ev: Events, overground: boolean): StrideP
     const heelO = ctx.ps(other(st.side), 'HEEL') ?? ctx.ps(other(st.side), 'ANKLE_LAT');
     if (!heel) continue;
 
-    const strideTime = (st.next - st.hs) * dt;
+    // A partial stride has no real next heel strike: anything measured to it
+    // is unknown, while the stance itself is fully observed.
+    const strideTime = st.partial ? NaN : (st.next - st.hs) * dt;
     const stanceTime = (st.to - st.hs) * dt;
 
     // Separation in the walker's own frame at this instant (curve-safe).
@@ -52,7 +54,9 @@ export function strideParams(ctx: Ctx, ev: Events, overground: boolean): StrideP
     const stepWidth = heelO ? Math.abs((heel[st.hs][0] - heelO[st.hs][0]) * right[0] + (heel[st.hs][2] - heelO[st.hs][2]) * right[2]) : NaN;
 
     let strideLength: number;
-    if (overground) {
+    if (st.partial) {
+      strideLength = NaN;
+    } else if (overground) {
       strideLength = Math.hypot(heel[st.next][0] - heel[st.hs][0], heel[st.next][2] - heel[st.hs][2]);
     } else {
       // Treadmill: this step plus the contralateral step that follows it.

@@ -130,6 +130,19 @@ missing). Nothing is silently guessed.
   the stance slope (80 % of it), lift-off where the toe's leaves it. Works on
   treadmill and overground, and is immune to a swing heel skimming the floor.
 - **Foot flat / heel off:** from heel→toe pitch vs. the median stance pitch.
+- **Partial strides:** a side's last heel strike, with its toe-off inside the
+  trial but no following heel strike, is kept with `partial: true` and an
+  estimated cycle end (median complete stride, else two median steps). Short
+  trials, especially running, often contain one complete stride per side or
+  none; dropping the final stance would leave a side empty. Stance measures
+  use partial strides; anything needing the next heel strike (stride time,
+  stride length, swing, stance %, whole-cycle ankle range) does not. Cycle
+  curves include them up to the end of the data (NaN beyond; the ensemble
+  averages whichever curves cover each point).
+- **Walking vs running:** `report.mode` is `running` when flight phases
+  (neither foot in contact) fill >5 % of the span between the first and last
+  detected events. Double-support measures are then empty by definition and
+  say so.
 
 ### 6.2 Requested kinematic morphology
 

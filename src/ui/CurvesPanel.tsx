@@ -15,7 +15,13 @@ function cyclePosition(report: GaitReport, frame: number) {
 export function CurvesPanel({ report, frame }: { report: GaitReport; frame: number }) {
   const cursor = cyclePosition(report, frame);
   const toeOff = mean(report.strides.map((s) => s.stancePct).filter(Number.isFinite));
-  const strides = (s: Side) => report.strides.filter((x) => x.side === s).length;
+  // "n" counts complete strides; a stride cut off by the end of the trial
+  // still contributes its covered part of the curve and is counted apart.
+  const strides = (s: Side) => {
+    const st = report.events.strides.filter((x) => x.side === s);
+    const partial = st.filter((x) => x.partial).length;
+    return `${st.length - partial}${partial ? ` + ${partial} partial` : ''}`;
+  };
   return (
     <div className="curves">
       <p className="curves__legend">

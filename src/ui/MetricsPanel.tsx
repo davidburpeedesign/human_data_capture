@@ -37,11 +37,17 @@ function Row({ m }: { m: Metric }) {
 }
 
 export function MetricsPanel({ report }: { report: GaitReport }) {
-  const n = { l: report.strides.filter((s) => s.side === 'left').length, r: report.strides.filter((s) => s.side === 'right').length };
+  // Complete strides, with any cut off by the end of the trial counted apart.
+  const count = (side: 'left' | 'right') => {
+    const st = report.events.strides.filter((s) => s.side === side);
+    const partial = st.filter((s) => s.partial).length;
+    return `${st.length - partial}${partial ? ` (+${partial} partial)` : ''}`;
+  };
+  const n = { l: count('left'), r: count('right') };
   return (
     <div className="metrics">
       <p className="metrics__summary muted">
-        {report.overground ? 'overground' : 'treadmill'} · {n.l} left / {n.r} right strides
+        {report.mode} · {report.overground ? 'overground' : 'treadmill'} · {n.l} left / {n.r} right strides
         {report.com && ` · com: ${report.com.method}`}
       </p>
       {report.groups.map((g) => (
