@@ -32,9 +32,11 @@ populated before you have data of your own.
 Drop files on the stage or use **open**. In the 3D view, the **ghost**
 layer draws every frame of the trial at once, translucent, like a long
 exposure; it is off by default and built on first use. The **view cube**
-(top right) mirrors the camera; click a face, or one of the six buttons
-under it, to snap to an orthographic front / back / left / right / top /
-bottom view, and use **persp / ortho** to switch projection. The camera is
+(top right) mirrors the camera: drag it to orbit, click a face to snap to
+that orthographic view (front / back / left / right / top / bottom), and use
+**persp / ortho** under it to switch projection. While the **grf** layer is
+on, the top-left bars show each foot's estimated force, their length and
+colour both scaled to 1.5 ×BW (the tick marks 1 ×BW). The camera is
 framed once, on the first dataset: loading another keeps the angle, zoom
 and projection (with *follow* on it slides to the new subject; turn follow
 off to keep it fixed in place). Units, up-axis and walking
