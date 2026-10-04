@@ -1,6 +1,8 @@
+/// <reference types="vite/client" />
 import { describe, expect, it } from 'vitest';
 import { parseAmc, parseAsf } from '../src/io/asf';
-import { prepareClip, registerSkeleton, skeletonFor } from '../src/io/index';
+import { importFiles, prepareClip, registerSkeleton, skeletonFor } from '../src/io/index';
+import ASX from './fixtures/07.asx?raw'; // real CMU subject 07 skeleton
 import { resolveLandmarks } from '../src/core/landmarks';
 import { analyzeGait, type GaitReport } from '../src/analysis/report';
 import { syntheticWalk } from '../src/demo/synthetic';
@@ -172,6 +174,35 @@ describe('asf/amc (cmu)', () => {
     expect(report.overground).toBe(true);
     expect(report.events.strides.filter((s) => s.side === 'left').length).toBeGreaterThanOrEqual(3);
     expect(cadence).toBeCloseTo(2 * f * 60, -1);
+  });
+});
+
+describe('real cmu skeleton (subject 07, .asx)', () => {
+  it('parses all 30 bones with anatomically plausible lengths', () => {
+    const skel = parseAsf(ASX, '07.asx');
+    expect(skel.bones).toHaveLength(30);
+    const len = (n: string) => skel.bones.find((b) => b.name === n)!.length;
+    expect(len('lfemur')).toBeCloseTo(0.391, 2);
+    expect(len('ltibia')).toBeCloseTo(0.418, 2);
+    expect(len('lhumerus')).toBeCloseTo(0.28, 2);
+  });
+
+  it('pairs with an .amc trial from a single drop and resolves every landmark', async () => {
+    const trial = amc([{ root: [0, 17, 0, 0, 0, 0] }, { root: [0, 17, 1, 0, 0, 0] }]);
+    const { datasets, skeletons, errors } = await importFiles([
+      new File([trial], '07_01.amc'),
+      new File([ASX], '07.asx'), // order must not matter
+    ]);
+    expect(errors).toEqual([]);
+    expect(skeletons).toEqual(['07.asx']);
+    const clip = datasets[0] as MotionClip;
+    expect(Object.keys(clip.landmarks)).toHaveLength(31);
+    // Hip joint ~0.79 m and head base ~1.43 m above the floor: a ~1.6 m subject.
+    const y = (id: 'L_HJC' | 'HEAD') => clip.trajectories.get(clip.landmarks[id]!)!.data[1];
+    expect(y('L_HJC')).toBeGreaterThan(0.7);
+    expect(y('L_HJC')).toBeLessThan(0.9);
+    expect(y('HEAD')).toBeGreaterThan(1.3);
+    expect(y('HEAD')).toBeLessThan(1.6);
   });
 });
 
