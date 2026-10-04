@@ -68,6 +68,10 @@ export function Timeline({ clip, report, frame, playing, speed, onFrame, onPlay,
         // 2px surface gap between consecutive stance bars.
         ctx.fillRect(x(h0) + 1, y, Math.max(1, x(end) - x(h0) - 2), rowH);
       }
+      // A stance already under way at frame 0 (toe-off before the first
+      // heel strike) runs from the start of the track.
+      const lead = to.find((v) => v < (hs[0] ?? Infinity));
+      if (lead !== undefined) ctx.fillRect(x(0), y, Math.max(1, x(lead) - x(0) - 1), rowH);
       if (report.grf) {
         const F = report.grf.foot[side];
         const step = Math.max(1, Math.floor(clip.frameCount / w));

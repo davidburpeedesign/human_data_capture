@@ -3,14 +3,17 @@ import { describe, expect, it } from 'vitest';
 import ASX from './fixtures/07.asx?raw';
 import RUN from './fixtures/09_01.amc?raw'; // real CMU run, subject 09 trial 01
 import WALK from './fixtures/07_01.amc?raw';
+import ASX09 from './fixtures/09.asx?raw';
+import RUN3 from './fixtures/09_03.amc?raw'; // CMU run 09_03, with its own skeleton
 import { parseAsf, parseAmc } from '../src/io/asf';
 import { prepareClip } from '../src/io/index';
 import { analyzeGait, type GaitReport } from '../src/analysis/report';
 import { ensemble } from '../src/core/signal';
 
-// Subject 09's own skeleton isn't in the fixtures; subject 07's stands in.
-// Bone lengths shift distances a little, but timing, event detection and
-// which strides exist (what these tests are about) come from the motion.
+// 09_01 runs on subject 07's skeleton (09.asx arrived later; 09_03 below
+// uses it). Bone lengths shift distances a little, but timing, event
+// detection and which strides exist (what these tests are about) come from
+// the motion.
 const skel = parseAsf(ASX, '07.asx');
 const run = analyzeGait(prepareClip(parseAmc(RUN, skel, '09_01.amc')));
 const metric = (r: GaitReport, id: string) => r.groups.flatMap((g) => g.metrics).find((m) => m.id === id)!;
@@ -49,14 +52,16 @@ describe('short running trial (1.2 s, one complete stride on one side only)', ()
     expect(metric(run, 'loading').note).toMatch(/running/);
   });
 
-  it('draws left curves as far as the trial goes, right curves in full', () => {
+  it('fills the left cycle from both ends of the trial', () => {
+    // The left foot is already down at frame 0 (toe-off before its first
+    // heel strike) and lands again near the end: together the two cut-off
+    // stances cover the whole cycle.
+    expect(run.events.leading.map((s) => s.side)).toContain('left');
     for (const id of ['kneeFlex', 'grfV']) {
       const c = run.curves.find((x) => x.id === id)!;
       const covered = (m: number[]) => m.filter(Number.isFinite).length;
-      expect(covered(c.right!.mean)).toBe(101);
-      expect(covered(c.left!.mean)).toBeGreaterThan(50);
-      expect(covered(c.left!.mean)).toBeLessThan(101);
-      expect(Number.isFinite(c.left!.mean[0])).toBe(true); // starts at heel strike
+      expect(covered(c.right!.mean), id).toBe(101);
+      expect(covered(c.left!.mean), id).toBe(101);
     }
   });
 });
@@ -80,5 +85,33 @@ describe('foot progression in running swing', () => {
     }
     // Stance, where the metric is taken, is untouched.
     expect(Number.isFinite(metric(run, 'fpa').right!.mean)).toBe(true);
+  });
+});
+
+describe('run 09_03 with its own skeleton (1.07 s, left foot down at the start)', () => {
+  const r = analyzeGait(prepareClip(parseAmc(RUN3, parseAsf(ASX09, '09.asx'), '09_03.amc')));
+
+  it('registers both feet', () => {
+    expect(r.mode).toBe('running');
+    expect(r.events.heelStrikes.left.length).toBeGreaterThan(0);
+    expect(r.events.heelStrikes.right.length).toBeGreaterThan(0);
+    // The opening left stance: real toe-off, heel strike before the clip.
+    const lead = r.events.leading.find((s) => s.side === 'left')!;
+    expect(lead.hs).toBeLessThan(0);
+    expect(lead.to).toBeGreaterThan(0);
+    expect(lead.next).toBe(r.events.heelStrikes.left[0]);
+  });
+
+  it('draws the left curves over most of the cycle, not just the last stance', () => {
+    for (const id of ['hipFlex', 'kneeFlex', 'grfV']) {
+      const c = r.curves.find((x) => x.id === id)!;
+      const covered = (m: number[]) => m.filter(Number.isFinite).length;
+      expect(covered(c.right!.mean), id).toBe(101);
+      expect(covered(c.left!.mean), id).toBeGreaterThan(95);
+    }
+  });
+
+  it('keeps stance metrics to stances it saw land', () => {
+    for (const id of ['stanceTime', 'grfPeak1']) expect(metric(r, id).left, id).toBeDefined();
   });
 });

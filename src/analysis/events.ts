@@ -38,6 +38,16 @@ export interface Events {
   heelStrikes: Record<Side, number[]>;
   toeOffs: Record<Side, number[]>;
   strides: Stride[];
+  /**
+   * Leading stances: already under way when the clip starts, so their heel
+   * strike is unobserved. `hs` is estimated (negative), `to` and `next` are
+   * real. Kept apart from `strides` because every stance and stride metric
+   * needs the real heel strike; only the cycle curves (which place each
+   * frame by % of cycle, anchored on the real `next`) and the timeline use
+   * them. Without these, a 1 s running trial can leave one side with half
+   * a curve when the data for the rest of its cycle is sitting at the start.
+   */
+  leading: Stride[];
   /** Frame-wise pelvis reference used for detection; reused for COM fallback. */
   pelvis: Vec3[] | null;
   /**
@@ -89,7 +99,7 @@ export function detectEvents(ctx: Ctx): Events {
   const strides: Stride[] = [];
 
   if (!pelvis) {
-    return { heelStrikes, toeOffs, strides, pelvis, heading: Array.from({ length: ctx.n }, (): Vec3 => [1, 0, 0]), speed: new Array(ctx.n).fill(0) };
+    return { heelStrikes, toeOffs, strides, leading: [], pelvis, heading: Array.from({ length: ctx.n }, (): Vec3 => [1, 0, 0]), speed: new Array(ctx.n).fill(0) };
   }
   const { heading, speed } = headingSeries(pelvis, ctx.rate);
   const along = (p: Vec3, i: number) => (p[0] - pelvis[i][0]) * heading[i][0] + (p[2] - pelvis[i][2]) * heading[i][2];
@@ -142,7 +152,21 @@ export function detectEvents(ctx: Ctx): Events {
     }
   }
 
-  return { heelStrikes, toeOffs, strides, pelvis, heading, speed };
+  // Leading stances: a toe-off before a side's first heel strike means the
+  // foot was already down at frame 0. Its stride is placed by counting one
+  // typical stride back from that first heel strike.
+  const leading: Stride[] = [];
+  if (strideFrames) {
+    for (const side of ['left', 'right'] as const) {
+      const first = heelStrikes[side][0];
+      if (first === undefined) continue;
+      const to = [...toeOffs[side]].reverse().find((t) => t < first);
+      if (to === undefined) continue;
+      leading.push({ side, hs: first - strideFrames, to, next: first, footFlat: NaN, heelOff: NaN, partial: true });
+    }
+  }
+
+  return { heelStrikes, toeOffs, strides, leading, pelvis, heading, speed };
 }
 
 /**

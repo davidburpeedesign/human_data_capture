@@ -139,6 +139,13 @@ missing). Nothing is silently guessed.
   stride length, swing, stance %, whole-cycle ankle range) does not. Cycle
   curves include them up to the end of the data (NaN beyond; the ensemble
   averages whichever curves cover each point).
+- **Leading stances:** a toe-off before a side's first heel strike means
+  the foot was down at frame 0. That stance goes in `events.leading` with
+  its real toe-off and next heel strike and an estimated start (one typical
+  stride before that heel strike, so negative). It feeds the cycle curves
+  only (NaN before frame 0) and the stance timeline; with no observed heel
+  strike it has no stance or stride metrics. On a one-second run this is
+  often the rest of a side's cycle.
 - **Walking vs running:** `report.mode` is `running` when flight phases
   (neither foot in contact) fill >5 % of the span between the first and last
   detected events. Double-support measures are then empty by definition and
