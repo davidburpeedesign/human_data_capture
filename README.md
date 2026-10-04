@@ -31,7 +31,13 @@ populated before you have data of your own.
 
 Drop files on the stage or use **open**. In the 3D view, the **ghost**
 layer draws every frame of the trial at once, translucent, like a long
-exposure; it is off by default and built on first use. Units, up-axis and walking
+exposure; it is off by default and built on first use. The **view cube**
+(top right) mirrors the camera; click a face, or one of the six buttons
+under it, to snap to an orthographic front / back / left / right / top /
+bottom view, and use **persp / ortho** to switch projection. The camera is
+framed once, on the first dataset: loading another keeps the angle, zoom
+and projection (with *follow* on it slides to the new subject; turn follow
+off to keep it fixed in place). Units, up-axis and walking
 direction are inferred from the body itself. Marker names are mapped to
 canonical landmarks (Plug-in Gait, CAST, Qualisys, the CMU marker set and
 mixamo/CMU joint names out of the box); the sidebar shows what resolved.

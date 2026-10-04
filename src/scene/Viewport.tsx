@@ -8,7 +8,7 @@
  * colours only on data marks (footprints). Point clouds blend additively so
  * dense regions bloom the way screen-blended renders do.
  */
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Dataset, MotionClip, Vec3 } from '../core/types';
@@ -17,6 +17,7 @@ import type { Layers } from '../ui/Sidebar';
 import { track } from '../core/landmarks';
 import { GRF_FULL_SCALE, rampCss, rgbCss, sideMagnitude } from '../core/colormap';
 import type { Side } from '../core/types';
+import { ViewCube, type View } from './ViewCube';
 
 /** Metres of arrow per body weight: 1 BW ≈ a third of standing height. */
 const GRF_SCALE = 0.6;
@@ -34,7 +35,12 @@ const css = (name: string) => getComputedStyle(document.documentElement).getProp
 interface Stage {
   renderer: THREE.WebGLRenderer;
   scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
+  /** The active camera: `persp` or `ortho`. OrbitControls drives whichever. */
+  camera: THREE.PerspectiveCamera | THREE.OrthographicCamera;
+  persp: THREE.PerspectiveCamera;
+  ortho: THREE.OrthographicCamera;
+  /** Set once the first dataset has framed the view; later loads keep it. */
+  framed: boolean;
   controls: OrbitControls;
   grid: THREE.Group;
   content: THREE.Group;
@@ -86,6 +92,69 @@ function disposeGroup(g: THREE.Object3D) {
 export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const stage = useRef<Stage | null>(null);
+  const cubeRef = useRef<HTMLDivElement>(null);
+  const [projection, setProjection] = useState<'persp' | 'ortho'>('persp');
+
+  /** Distance from camera to target; for ortho, the equivalent perspective distance. */
+  const viewDistance = (s: Stage) => {
+    const d = s.camera.position.distanceTo(s.controls.target);
+    return s.camera instanceof THREE.OrthographicCamera ? d / s.camera.zoom : d;
+  };
+
+  /** Make `cam` the active camera, handing it the orbit controls. */
+  const activate = (s: Stage, cam: Stage['camera']) => {
+    s.camera = cam;
+    s.controls.object = cam;
+    s.controls.update();
+  };
+
+  // Snap to an axis view in orthographic projection, keeping the target and
+  // the apparent scale (frustum height matches what perspective showed).
+  const snap = useCallback((v: View) => {
+    const s = stage.current;
+    if (!s) return;
+    const d = viewDistance(s);
+    // A hair off-axis for top/bottom: OrbitControls is singular straight down Y.
+    const dir: Record<View, [number, number, number]> = {
+      front: [1, 0, 0], back: [-1, 0, 0], right: [0, 0, 1], left: [0, 0, -1],
+      top: [-1e-4, 1, 0], bottom: [-1e-4, -1, 0],
+    };
+    const halfH = d * Math.tan(THREE.MathUtils.degToRad(s.persp.fov / 2));
+    const o = s.ortho;
+    o.top = halfH; o.bottom = -halfH;
+    o.left = -halfH * s.persp.aspect; o.right = halfH * s.persp.aspect;
+    o.zoom = 1;
+    o.updateProjectionMatrix();
+    o.up.set(0, 1, 0);
+    o.position.copy(s.controls.target).add(new THREE.Vector3(...dir[v]).normalize().multiplyScalar(d));
+    o.lookAt(s.controls.target);
+    activate(s, o);
+    setProjection('ortho');
+  }, []);
+
+  // Swap projection in place, keeping the viewing direction and scale.
+  const toggleProjection = useCallback(() => {
+    const s = stage.current;
+    if (!s) return;
+    const d = viewDistance(s);
+    const dir = s.camera.position.clone().sub(s.controls.target).normalize();
+    if (s.camera instanceof THREE.OrthographicCamera) {
+      s.persp.position.copy(s.controls.target).addScaledVector(dir, d);
+      activate(s, s.persp);
+      setProjection('persp');
+    } else {
+      const halfH = d * Math.tan(THREE.MathUtils.degToRad(s.persp.fov / 2));
+      const o = s.ortho;
+      o.top = halfH; o.bottom = -halfH;
+      o.left = -halfH * s.persp.aspect; o.right = halfH * s.persp.aspect;
+      o.zoom = 1;
+      o.updateProjectionMatrix();
+      o.position.copy(s.controls.target).addScaledVector(dir, d);
+      o.up.set(0, 1, 0);
+      activate(s, o);
+      setProjection('ortho');
+    }
+  }, []);
 
   // ── one-time setup ───────────────────────────────────────────────────
   useEffect(() => {
@@ -98,6 +167,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, 0.01, 200);
     camera.position.set(0.6, 1.4, 4.2);
+    const ortho = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 200);
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.target.set(0.6, 0.85, 0);
     controls.enableDamping = true;
@@ -108,7 +178,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     scene.add(grid, content);
 
     stage.current = {
-      renderer, scene, camera, controls, grid, content,
+      renderer, scene, camera, persp: camera, ortho, framed: false, controls, grid, content,
       markers: null, bones: null, comDot: null, comTrail: null, footprints: null, grfArrows: null, ghost: null,
       names: [], bonePairs: [], lastFollowX: NaN,
     };
@@ -118,15 +188,31 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
       renderer.setSize(w, h, false);
       camera.aspect = w / Math.max(1, h);
       camera.updateProjectionMatrix();
+      // Keep the ortho frustum's height, widen it to the new aspect.
+      const halfH = ortho.top;
+      ortho.left = -halfH * camera.aspect;
+      ortho.right = halfH * camera.aspect;
+      ortho.updateProjectionMatrix();
     };
     const ro = new ResizeObserver(resize);
     ro.observe(el);
     resize();
 
     let raf = 0;
+    // View-cube orientation: the camera's world→view rotation, with Y
+    // flipped on both sides because CSS y points down (S·R·S).
+    const flipY = new THREE.Matrix4().makeScale(1, -1, 1);
+    const view = new THREE.Matrix4();
     const loop = () => {
+      const s = stage.current!;
       controls.update();
-      renderer.render(scene, camera);
+      renderer.render(scene, s.camera);
+      const cube = cubeRef.current;
+      if (cube) {
+        view.extractRotation(s.camera.matrixWorldInverse);
+        view.premultiply(flipY).multiply(flipY);
+        cube.style.transform = `translateZ(calc(-1 * var(--cube-half))) matrix3d(${view.elements.join(',')})`;
+      }
       raf = requestAnimationFrame(loop);
     };
     loop();
@@ -160,10 +246,13 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
         blending: THREE.AdditiveBlending, depthWrite: false,
       }));
       s.content.add(pts);
-      geo.computeBoundingBox();
-      const h = geo.boundingBox!.max.y;
-      s.controls.target.set(0, h * 0.5, 0);
-      s.camera.position.set(2.4, h * 0.65, 2.8);
+      if (!s.framed) {
+        geo.computeBoundingBox();
+        const h = geo.boundingBox!.max.y;
+        s.controls.target.set(0, h * 0.5, 0);
+        s.camera.position.set(2.4, h * 0.65, 2.8);
+        s.framed = true;
+      }
       return;
     }
 
@@ -184,11 +273,17 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
 
     s.content.add(s.markers, s.bones);
 
-    const first = track(clip, 'SACRUM') ?? clip.trajectories.values().next().value;
-    const x0 = first ? first.data[0] : 0;
-    // Three-quarter view from the subject's right, slightly above the pelvis.
-    s.controls.target.set(x0 + 0.3, 0.75, 0);
-    s.camera.position.set(x0 + 2.2, 2.0, 3.9);
+    // Frame only the first dataset; after that the camera (angle, distance,
+    // projection) is the user's and carries over between datasets. Follow
+    // mode still slides it along to the new subject on the first frame.
+    if (!s.framed) {
+      const first = track(clip, 'SACRUM') ?? clip.trajectories.values().next().value;
+      const x0 = first ? first.data[0] : 0;
+      // Three-quarter view from the subject's right, slightly above the pelvis.
+      s.controls.target.set(x0 + 0.3, 0.75, 0);
+      s.camera.position.set(x0 + 2.2, 2.0, 3.9);
+      s.framed = true;
+    }
   }, [dataset]);
 
   // ── ghost: the whole trial at once ───────────────────────────────────
@@ -313,6 +408,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
       }}
     >
       <div className="viewport__gl" ref={host} />
+      <ViewCube cubeRef={cubeRef} mode={projection} onView={snap} onToggleMode={toggleProjection} />
       <span className="tick tick--tl" />
       <span className="tick tick--tr" />
       <span className="tick tick--bl" />
