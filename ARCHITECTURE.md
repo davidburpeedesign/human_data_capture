@@ -221,6 +221,12 @@ data colours (`--data-left` red #EA5A65, `--data-right` blue #4698C7) appear
 only on data marks and were validated for dark-surface contrast and
 colour-vision separation.
 
+**Ghost layer**: every frame's skeleton and markers in two draw calls
+(one LineSegments, one Points), additively blended bone ink with opacity
+scaled to frame count, so dwell regions build up brighter. Built lazily on
+first toggle, rebuilt per dataset; gap (NaN) samples are skipped so they
+can't poison the bounding volume.
+
 **Magnitude ramp** (`core/colormap.ts`): anything whose colour encodes "how
 much" uses one diverging ramp around a near-black zero, mint → blue → navy →
 black → maroon → red → blush. The limb colours sit inside it, so a per-side

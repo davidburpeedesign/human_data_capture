@@ -24,6 +24,7 @@ const DEFAULT_LAYERS: Layers = {
   grid: true,
   follow: true,
   grf: true,
+  ghost: false,
 };
 
 export function App() {

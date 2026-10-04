@@ -9,6 +9,8 @@ export interface Layers {
   grid: boolean;
   follow: boolean;
   grf: boolean;
+  /** Every frame drawn at once, translucent. */
+  ghost: boolean;
 }
 
 interface Props {
