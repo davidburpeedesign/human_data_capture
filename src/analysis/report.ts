@@ -414,7 +414,8 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     for (const side of SIDES) {
       const v = series[side];
       if (!v) continue;
-      const cycles = strides(side).map((s) => resample(v, s.hs, s.next));
+      // Leading stances add the part of the cycle the clip opens with.
+      const cycles = [...strides(side), ...events.leading.filter((s) => s.side === side)].map((s) => resample(v, s.hs, s.next));
       if (cycles.length) c[side] = ensemble(cycles);
     }
     if (!c.left && !c.right) c.status = 'unavailable';

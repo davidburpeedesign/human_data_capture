@@ -118,8 +118,9 @@ export function resample(x: ArrayLike<number>, start: number, end: number, point
     const i0 = Math.floor(t);
     const i1 = Math.min(i0 + 1, x.length - 1);
     const f = t - i0;
-    // Past the end of the data (a partial stride's estimated cycle): NaN.
-    out[i] = i0 < x.length ? x[i0] * (1 - f) + x[i1] * f : NaN;
+    // Outside the data (a partial stride's estimated cycle, before frame 0
+    // or past the last): NaN.
+    out[i] = i0 >= 0 && i0 < x.length ? x[i0] * (1 - f) + x[i1] * f : NaN;
   }
   return out;
 }
