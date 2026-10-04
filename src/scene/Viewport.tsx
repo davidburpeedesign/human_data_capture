@@ -132,6 +132,22 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     setProjection('ortho');
   }, []);
 
+  // Orbit from the view cube: the same spherical step OrbitControls takes
+  // for a drag on the canvas, so both feel alike. The projection is kept, as
+  // it is for a canvas drag; the mode button switches it explicitly.
+  const orbit = useCallback((dx: number, dy: number) => {
+    const s = stage.current;
+    if (!s) return;
+    const k = 0.012; // rad per px: a cube-width drag turns ~40°
+    const offset = s.camera.position.clone().sub(s.controls.target);
+    const sph = new THREE.Spherical().setFromVector3(offset);
+    sph.theta -= dx * k;
+    sph.phi = THREE.MathUtils.clamp(sph.phi - dy * k, 1e-4, Math.PI - 1e-4);
+    s.camera.position.copy(s.controls.target).add(offset.setFromSpherical(sph));
+    s.camera.lookAt(s.controls.target);
+    s.controls.update();
+  }, []);
+
   // Swap projection in place, keeping the viewing direction and scale.
   const toggleProjection = useCallback(() => {
     const s = stage.current;
@@ -408,7 +424,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
       }}
     >
       <div className="viewport__gl" ref={host} />
-      <ViewCube cubeRef={cubeRef} mode={projection} onView={snap} onToggleMode={toggleProjection} />
+      <ViewCube cubeRef={cubeRef} mode={projection} onView={snap} onOrbit={orbit} onToggleMode={toggleProjection} />
       <span className="tick tick--tl" />
       <span className="tick tick--tr" />
       <span className="tick tick--bl" />
@@ -419,10 +435,17 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
           {(['left', 'right'] as const).map((side) => {
             const F = report.grf!.foot[side][Math.max(0, Math.min(frame, dataset.frameCount - 1))];
             const mag = Math.hypot(F[0], F[1], F[2]);
+            // Bar spans the colour ramp's full scale and saturates with it;
+            // the number keeps the true value (running peaks pass 2 ×BW).
+            const fill = Math.min(1, mag / GRF_FULL_SCALE);
             return (
-              <span key={side}>
-                <i style={{ background: rgbCss(sideMagnitude(side, mag / GRF_FULL_SCALE)) }} />
-                {side[0]} {mag.toFixed(2)} ×BW
+              <span key={side} className="grfbar">
+                <span>{side[0]}</span>
+                <span className="grfbar__track">
+                  <span className="grfbar__fill" style={{ width: `${fill * 100}%`, background: rgbCss(sideMagnitude(side, fill)) }} />
+                  <span className="grfbar__bw" style={{ left: `${100 / GRF_FULL_SCALE}%` }} />
+                </span>
+                <span className="grfbar__val">{mag.toFixed(2)} ×BW</span>
               </span>
             );
           })}
@@ -433,10 +456,6 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
           </span>
         </div>
       )}
-      <div className="viewport__legend">
-        <span>x anterior · y superior · z right</span>
-        <span className="muted">drag to orbit · scroll to zoom · drop .bvh .asx+.amc .c3d .csv .ply .obj .stl</span>
-      </div>
     </div>
   );
 }
