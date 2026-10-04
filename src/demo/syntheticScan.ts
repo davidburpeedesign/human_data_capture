@@ -31,12 +31,22 @@ function interp<T extends number[]>(table: T[], f: number): T | null {
   return null;
 }
 
-export function syntheticScan(stature = 1.75, density = 1): BodyScan {
+/** Small LCG: the scan doubles as a test fixture, so it must be reproducible. */
+function rng(seed: number) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 4294967296;
+  };
+}
+
+export function syntheticScan(stature = 1.75, density = 1, seed = 1): BodyScan {
+  const random = rng(seed);
   const pts: number[] = [];
   const s = stature / 1.75;
   const ring = (cy: number, cx: number, cz: number, rx: number, rz: number, n: number, e = 2.6) => {
     for (let i = 0; i < n; i++) {
-      const a = (2 * Math.PI * (i + Math.random() * 0.5)) / n;
+      const a = (2 * Math.PI * (i + random() * 0.5)) / n;
       const c = Math.cos(a), sn = Math.sin(a);
       // Superellipse: squarer than an ellipse, closer to a torso section.
       const x = Math.sign(c) * Math.abs(c) ** (2 / e) * rx;
@@ -50,7 +60,10 @@ export function syntheticScan(stature = 1.75, density = 1): BodyScan {
     const f = r / rows;
     const y = f * stature;
     const torso = interp(TORSO, f) ?? interp(HEAD, f);
-    if (torso) ring(y, 0, 0, torso[2] * s, torso[1] * s, Math.round(170 * density));
+    // Superellipse sampling thins out along the flat sides; 240 points keeps
+    // every gap under the girth analysis's 12 mm blob cell, so a torso slice
+    // is never split in two (170 split ~4 % of random scans).
+    if (torso) ring(y, 0, 0, torso[2] * s, torso[1] * s, Math.round(240 * density));
     const leg = interp(LEG, f);
     if (leg) {
       for (const side of [-1, 1]) ring(y, f < 0.06 ? 0.04 * s : 0, side * 0.09 * s, leg[1] * s, leg[1] * s * 0.95, Math.round(40 * density), 2.1);
