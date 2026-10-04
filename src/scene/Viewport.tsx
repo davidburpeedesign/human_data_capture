@@ -241,11 +241,12 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     // Follow: slide camera and target with the subject, keep user's orbit.
     if (layers.follow && report?.events.pelvis) {
       const x = report.events.pelvis[f][0];
-      if (Number.isFinite(s.lastFollowX)) {
-        const dx = x - s.lastFollowX;
-        s.camera.position.x += dx;
-        s.controls.target.x += dx;
-      }
+      // First followed frame after a dataset swap: recentre on the subject
+      // rather than trusting the camera placement, because the swap renders
+      // once with the previous clip's frame index before playback resets.
+      const dx = Number.isFinite(s.lastFollowX) ? x - s.lastFollowX : x + 0.3 - s.controls.target.x;
+      s.camera.position.x += dx;
+      s.controls.target.x += dx;
       s.lastFollowX = x;
     } else {
       s.lastFollowX = NaN;
@@ -269,7 +270,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
       <span className="tick tick--br" />
       <div className="viewport__legend">
         <span>x anterior · y superior · z right</span>
-        <span className="muted">drag to orbit · scroll to zoom · drop .bvh .c3d .csv .ply .obj .stl</span>
+        <span className="muted">drag to orbit · scroll to zoom · drop .bvh .asf+.amc .c3d .csv .ply .obj .stl</span>
       </div>
     </div>
   );

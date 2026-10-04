@@ -36,7 +36,7 @@ export interface MotionClip {
   id: string;
   name: string;
   /** Source format, for the readout only. */
-  format: 'bvh' | 'c3d' | 'csv' | 'synthetic';
+  format: 'bvh' | 'amc' | 'c3d' | 'csv' | 'synthetic';
   rate: number;
   frameCount: number;
   trajectories: Map<string, Trajectory>;

@@ -4,13 +4,14 @@
  * Zeni et al. (2008): relative to the pelvis, the heel is furthest forward
  * at heel strike and the toe is furthest back at toe off. This is robust on
  * both treadmill and overground trials, because subtracting the pelvis
- * removes walking speed from the signal.
+ * removes walking speed from the signal. "Forward" is the instantaneous
+ * direction of travel, so curved paths work too.
  *
  * Foot-flat and heel-off (used for loading/unloading timing) come from the
  * heel/toe marker heights relative to their stance minima.
  */
 import type { Side, Vec3 } from '../core/types';
-import { findPeaks } from '../core/signal';
+import { derivative, findPeaks, lowpass } from '../core/signal';
 import { mid } from '../core/vec';
 import type { Ctx } from './context';
 
@@ -31,6 +32,31 @@ export interface Events {
   strides: Stride[];
   /** Frame-wise pelvis reference used for detection; reused for COM fallback. */
   pelvis: Vec3[] | null;
+  /**
+   * Unit direction of travel per frame, on the ground plane. Follows the
+   * walker round curves; +X when the pelvis isn't going anywhere (treadmill).
+   */
+  heading: Vec3[];
+  /** Smoothed horizontal pelvis speed per frame, m/s. */
+  speed: number[];
+}
+
+/** Lab-right for a heading: forward × up. */
+export const rightOf = (h: Vec3): Vec3 => [-h[2], 0, h[0]];
+
+/**
+ * Direction of travel from the pelvis's horizontal velocity, low-passed
+ * well below step frequency (0.4 Hz) so the side-to-side sway of each step
+ * doesn't swing the heading. CMU and most overground trials curve; a single
+ * global "forward" axis would rotate every per-step measure on a bend.
+ */
+function headingSeries(pelvis: Vec3[], rate: number): { heading: Vec3[]; speed: number[] } {
+  const vx = lowpass(derivative(pelvis.map((p) => p[0]), rate), rate, 0.4);
+  const vz = lowpass(derivative(pelvis.map((p) => p[2]), rate), rate, 0.4);
+  const speed = vx.map((x, i) => Math.hypot(x, vz[i]));
+  // Below walking pace the direction is noise; hold the lab axis instead.
+  const heading = speed.map((s, i): Vec3 => (s > 0.15 ? [vx[i] / s, 0, vz[i] / s] : [1, 0, 0]));
+  return { heading, speed };
 }
 
 /** Pelvis centroid from whatever pelvic landmarks exist. */
@@ -54,7 +80,11 @@ export function detectEvents(ctx: Ctx): Events {
   const toeOffs: Record<Side, number[]> = { left: [], right: [] };
   const strides: Stride[] = [];
 
-  if (!pelvis) return { heelStrikes, toeOffs, strides, pelvis };
+  if (!pelvis) {
+    return { heelStrikes, toeOffs, strides, pelvis, heading: Array.from({ length: ctx.n }, (): Vec3 => [1, 0, 0]), speed: new Array(ctx.n).fill(0) };
+  }
+  const { heading, speed } = headingSeries(pelvis, ctx.rate);
+  const along = (p: Vec3, i: number) => (p[0] - pelvis[i][0]) * heading[i][0] + (p[2] - pelvis[i][2]) * heading[i][2];
 
   // Steps are ≥ ~0.35 s even when running; half that keeps doubles apart.
   const minGap = Math.max(3, Math.round(0.35 * ctx.rate));
@@ -65,8 +95,8 @@ export function detectEvents(ctx: Ctx): Events {
     const toe = ctx.ps(side, 'TOE') ?? heel;
     if (!heel || !toe) continue;
 
-    const heelRel = heel.map((h, i) => h[0] - pelvis[i][0]);
-    const toeRel = toe.map((t, i) => -(t[0] - pelvis[i][0]));
+    const heelRel = heel.map((h, i) => along(h, i));
+    const toeRel = toe.map((t, i) => -along(t, i));
     const win = Math.round(0.15 * ctx.rate);
     heelStrikes[side] = findPeaks(heelRel, minGap, prominence).map((h) => refineContact(heel, toe, h, win, 'on'));
     toeOffs[side] = findPeaks(toeRel, minGap, prominence).map((t) => refineContact(heel, toe, t, win, 'off'));
@@ -85,7 +115,7 @@ export function detectEvents(ctx: Ctx): Events {
     }
   }
 
-  return { heelStrikes, toeOffs, strides, pelvis };
+  return { heelStrikes, toeOffs, strides, pelvis, heading, speed };
 }
 
 /**

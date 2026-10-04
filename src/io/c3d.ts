@@ -2,9 +2,9 @@
  * C3D importer: the biomechanics lab interchange format (Vicon, Qualisys,
  * Motion Analysis, OptiTrack all export it).
  *
- * Supports Intel (little-endian) integer and float point data, which covers
- * essentially every modern file. DEC and MIPS processor types are rejected
- * with a clear message rather than silently misread. Analog channels (force
+ * Supports integer and float point data from all three C3D processor types:
+ * Intel (little-endian), DEC (VAX floats; many CMU database files) and MIPS
+ * (big-endian). Analog channels (force
  * plates, EMG) are skipped for now; see ARCHITECTURE.md §roadmap.
  *
  * Reference: https://www.c3d.org/HTML/default.htm
@@ -25,8 +25,10 @@ export function parseC3d(buffer: ArrayBuffer, name = 'trial.c3d'): MotionClip {
   const paramBlock = u8[0];
   const paramStart = (paramBlock - 1) * 512;
   const processor = u8[paramStart + 3] - 83; // 1 intel, 2 dec, 3 mips
-  if (processor !== 1) throw new Error(`c3d: processor type ${processor} not supported (intel only)`);
-  const le = true;
+  if (processor < 1 || processor > 3) throw new Error(`c3d: unknown processor type ${processor}`);
+  // DEC shares Intel's little-endian integers; only MIPS is big-endian.
+  const le = processor !== 3;
+  const f32 = (offset: number) => (processor === 2 ? decFloat(u8, offset) : view.getFloat32(offset, le));
 
   // ── parameter section ────────────────────────────────────────────────
   const groups = new Map<number, string>();
@@ -68,7 +70,7 @@ export function parseC3d(buffer: ArrayBuffer, name = 'trial.c3d'): MotionClip {
 
   const num = (prm: Param | undefined, fallback: number) => {
     if (!prm) return fallback;
-    if (prm.type === 4) return prm.bytes.getFloat32(0, le);
+    if (prm.type === 4) return f32(prm.bytes.byteOffset);
     if (prm.type === 2) return prm.bytes.getInt16(0, le);
     return prm.bytes.getInt8(0);
   };
@@ -90,9 +92,9 @@ export function parseC3d(buffer: ArrayBuffer, name = 'trial.c3d'): MotionClip {
   const analogPerFrame = view.getUint16(4, le);
   const firstFrame = view.getUint16(6, le);
   const lastFrame = view.getUint16(8, le);
-  const headerScale = view.getFloat32(12, le);
+  const headerScale = f32(12);
   const dataStart = (view.getUint16(16, le) - 1) * 512;
-  const headerRate = view.getFloat32(20, le);
+  const headerRate = f32(20);
 
   const scaleFactor = num(get('POINT', 'SCALE'), headerScale);
   const rate = num(get('POINT', 'RATE'), headerRate);
@@ -118,8 +120,8 @@ export function parseC3d(buffer: ArrayBuffer, name = 'trial.c3d'): MotionClip {
       const o = base + i * ptBytes;
       let x, y, z, residual;
       if (isFloat) {
-        x = view.getFloat32(o, le); y = view.getFloat32(o + 4, le); z = view.getFloat32(o + 8, le);
-        residual = view.getFloat32(o + 12, le);
+        x = f32(o); y = f32(o + 4); z = f32(o + 8);
+        residual = f32(o + 12);
       } else {
         x = view.getInt16(o, le) * s; y = view.getInt16(o + 2, le) * s; z = view.getInt16(o + 4, le) * s;
         residual = view.getInt16(o + 6, le);
@@ -150,4 +152,18 @@ export function parseC3d(buffer: ArrayBuffer, name = 'trial.c3d'): MotionClip {
     landmarks: {},
     meta: { points: pointCount, analog_per_frame: analogPerFrame, units },
   };
+}
+
+/**
+ * VAX F_floating → IEEE single. Same field widths as IEEE, but the two
+ * 16-bit words are swapped and the exponent bias is 128 with the hidden bit
+ * at 0.1 instead of 1.0, which together make the value 4× too large.
+ */
+const decScratch = new DataView(new ArrayBuffer(4));
+function decFloat(u8: Uint8Array, o: number): number {
+  decScratch.setUint8(0, u8[o + 2]);
+  decScratch.setUint8(1, u8[o + 3]);
+  decScratch.setUint8(2, u8[o]);
+  decScratch.setUint8(3, u8[o + 1]);
+  return decScratch.getFloat32(0, true) / 4;
 }

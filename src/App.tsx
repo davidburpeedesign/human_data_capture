@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { BodyScan, Dataset } from './core/types';
-import { importFile, prepareClip } from './io/index';
+import { importFiles, prepareClip } from './io/index';
 import { analyzeGait } from './analysis/report';
 import { analyzeScan } from './analysis/scan';
 import { syntheticWalk } from './demo/synthetic';
@@ -71,21 +71,18 @@ export function App() {
 
   const open = useCallback(async (files: File[]) => {
     setBusy(true);
-    let lastId: string | null = null;
-    for (const file of files) {
-      setStatus(`reading ${file.name}...`);
-      try {
-        const d = await importFile(file);
-        setDatasets((ds) => [...ds, d]);
-        lastId = d.id;
-      } catch (e) {
-        setStatus(`${file.name}: ${(e as Error).message}`);
-        setBusy(false);
-        return;
-      }
+    setStatus(`reading ${files.length} file${files.length > 1 ? 's' : ''}...`);
+    const { datasets: added, skeletons, errors } = await importFiles(files);
+    if (added.length) {
+      setDatasets((ds) => [...ds, ...added]);
+      setActiveId(added[added.length - 1].id);
     }
-    if (lastId) setActiveId(lastId);
-    setStatus('ready');
+    const notes = [
+      added.length ? `loaded ${added.length}` : '',
+      skeletons.length ? `skeleton ${skeletons.join(', ')} ready${added.length ? '' : ': drop its .amc trials'}` : '',
+      ...errors,
+    ].filter(Boolean);
+    setStatus(notes.join(' · ') || 'ready');
     setBusy(false);
   }, []);
 
