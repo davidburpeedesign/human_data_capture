@@ -281,7 +281,7 @@ button, input, select, label { font: inherit; letter-spacing: inherit; color: in
 .ramp { display: inline-flex; align-items: center; gap: var(--sp-1); }
 .ramp b { display: inline-block; width: 96px; height: 6px; }
 
-/* per-leg grf bar: length and colour both track |F|, full at GRF_FULL_SCALE */
+/* per-leg grf bar: length and colour both track |F|, full at the trial's grf scale */
 .grfbar { display: flex; align-items: center; gap: var(--sp-2); }
 .grfbar__track {
   position: relative;
@@ -314,6 +314,7 @@ button, input, select, label { font: inherit; letter-spacing: inherit; color: in
 .timeline__track { display: block; width: 100%; height: 56px; cursor: ew-resize; touch-action: none; }
 
 i { display: inline-block; width: 8px; height: 8px; vertical-align: baseline; margin: 0 2px 0 6px; }
+i.swatch--ramp { width: 24px; height: 6px; }
 
 /* ── right panel ────────────────────────────────────────────────────── */
 

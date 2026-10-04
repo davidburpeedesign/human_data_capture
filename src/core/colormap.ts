@@ -12,7 +12,7 @@
  *
  * Stops are interpolated in sRGB, as the gradient they were taken from was.
  */
-import type { Side } from './types';
+import type { Side, Vec3 } from './types';
 
 export const RAMP = [
   '#b2e3d9', // −1  mint
@@ -49,5 +49,18 @@ export const rgbCss = (c: RGB) => `rgb(${c.map((v) => Math.round(v * 255)).join(
 export const rampCss = (direction = '90deg') =>
   `linear-gradient(${direction}, ${RAMP.map((c, i) => `${c} ${((100 * i) / (RAMP.length - 1)).toFixed(1)}%`).join(', ')})`;
 
-/** Ground reaction force that maps to the end of the ramp, ×BW. */
-export const GRF_FULL_SCALE = 1.5;
+/** Smallest GRF full scale, ×BW: walking peaks (~1.2) sit comfortably inside. */
+export const GRF_MIN_SCALE = 1.5;
+
+/**
+ * Ground reaction force that maps to the end of the ramp (and fills the HUD
+ * bars) for one trial, ×BW: the trial's peak |F| rounded up to 0.5, never
+ * below GRF_MIN_SCALE. A fixed scale either saturates running (2–3 ×BW) or
+ * flattens walking; per trial, both use the whole ramp. Comparing colours
+ * across trials therefore needs the scale shown beside them.
+ */
+export function grfFullScale(foot: Record<Side, Vec3[]>): number {
+  let peak = 0;
+  for (const F of [foot.left, foot.right]) for (const f of F) peak = Math.max(peak, Math.hypot(f[0], f[1], f[2]));
+  return Math.max(GRF_MIN_SCALE, Math.ceil(peak * 2) / 2);
+}

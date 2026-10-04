@@ -8,14 +8,14 @@
  * colours only on data marks (footprints). Point clouds blend additively so
  * dense regions bloom the way screen-blended renders do.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { Dataset, MotionClip, Vec3 } from '../core/types';
 import type { GaitReport } from '../analysis/report';
 import type { Layers } from '../ui/Sidebar';
 import { track } from '../core/landmarks';
-import { GRF_FULL_SCALE, rampCss, rgbCss, sideMagnitude } from '../core/colormap';
+import { grfFullScale, rampCss, rgbCss, sideMagnitude } from '../core/colormap';
 import type { Side } from '../core/types';
 import { ViewCube, type View } from './ViewCube';
 
@@ -94,6 +94,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
   const stage = useRef<Stage | null>(null);
   const cubeRef = useRef<HTMLDivElement>(null);
   const [projection, setProjection] = useState<'persp' | 'ortho'>('persp');
+  const grfFull = useMemo(() => (report?.grf ? grfFullScale(report.grf.foot) : 0), [report]);
 
   /** Distance from camera to target; for ortho, the equivalent perspective distance. */
   const viewDistance = (s: Stage) => {
@@ -392,7 +393,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
         a.setDirection(new THREE.Vector3(F[0] / mag, F[1] / mag, F[2] / mag));
         a.setLength(mag * GRF_SCALE, 0.07, 0.04);
         // Colour carries magnitude: black (none) toward the foot's own hue.
-        const c = sideMagnitude(side, mag / GRF_FULL_SCALE);
+        const c = sideMagnitude(side, mag / grfFull);
         a.setColor(new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace));
       }
     }
@@ -411,7 +412,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     } else {
       s.lastFollowX = NaN;
     }
-  }, [dataset, frame, report, layers]);
+  }, [dataset, frame, report, layers, grfFull]);
 
   return (
     <div
@@ -435,24 +436,24 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
           {(['left', 'right'] as const).map((side) => {
             const F = report.grf!.foot[side][Math.max(0, Math.min(frame, dataset.frameCount - 1))];
             const mag = Math.hypot(F[0], F[1], F[2]);
-            // Bar spans the colour ramp's full scale and saturates with it;
-            // the number keeps the true value (running peaks pass 2 ×BW).
-            const fill = Math.min(1, mag / GRF_FULL_SCALE);
+            // Bar spans the trial's full scale (its peak, rounded up), so
+            // running peaks fit as well as walking ones.
+            const fill = Math.min(1, mag / grfFull);
             return (
               <span key={side} className="grfbar">
                 <span>{side[0]}</span>
                 <span className="grfbar__track">
                   <span className="grfbar__fill" style={{ width: `${fill * 100}%`, background: rgbCss(sideMagnitude(side, fill)) }} />
-                  <span className="grfbar__bw" style={{ left: `${100 / GRF_FULL_SCALE}%` }} />
+                  <span className="grfbar__bw" style={{ left: `${100 / grfFull}%` }} />
                 </span>
                 <span className="grfbar__val">{mag.toFixed(2)} ×BW</span>
               </span>
             );
           })}
           <span className="ramp">
-            <span className="muted">r {GRF_FULL_SCALE}</span>
+            <span className="muted">r {grfFull}</span>
             <b style={{ background: rampCss() }} />
-            <span className="muted">{GRF_FULL_SCALE} l</span>
+            <span className="muted">{grfFull} l</span>
           </span>
         </div>
       )}
