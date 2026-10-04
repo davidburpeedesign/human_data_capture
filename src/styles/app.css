@@ -226,6 +226,9 @@ button, input, select, label { font: inherit; letter-spacing: inherit; color: in
   pointer-events: none;
 }
 
+.ramp { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.ramp b { display: inline-block; width: 96px; height: 6px; }
+
 .viewport__legend {
   position: absolute;
   left: var(--sp-3);

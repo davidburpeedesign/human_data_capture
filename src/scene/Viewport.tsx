@@ -15,6 +15,7 @@ import type { Dataset, MotionClip, Vec3 } from '../core/types';
 import type { GaitReport } from '../analysis/report';
 import type { Layers } from '../ui/Sidebar';
 import { track } from '../core/landmarks';
+import { GRF_FULL_SCALE, rampCss, rgbCss, sideMagnitude } from '../core/colormap';
 import type { Side } from '../core/types';
 
 /** Metres of arrow per body weight: 1 BW ≈ a third of standing height. */
@@ -266,6 +267,9 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
         a.position.set(cop[0], cop[1], cop[2]);
         a.setDirection(new THREE.Vector3(F[0] / mag, F[1] / mag, F[2] / mag));
         a.setLength(mag * GRF_SCALE, 0.07, 0.04);
+        // Colour carries magnitude: black (none) toward the foot's own hue.
+        const c = sideMagnitude(side, mag / GRF_FULL_SCALE);
+        a.setColor(new THREE.Color().setRGB(c[0], c[1], c[2], THREE.SRGBColorSpace));
       }
     }
     s.grid.visible = layers.grid;
@@ -305,13 +309,19 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
           <span className="muted">grf (est.)</span>
           {(['left', 'right'] as const).map((side) => {
             const F = report.grf!.foot[side][Math.max(0, Math.min(frame, dataset.frameCount - 1))];
+            const mag = Math.hypot(F[0], F[1], F[2]);
             return (
               <span key={side}>
-                <i style={{ background: `var(--data-${side})` }} />
-                {side[0]} {F[1].toFixed(2)} ×BW
+                <i style={{ background: rgbCss(sideMagnitude(side, mag / GRF_FULL_SCALE)) }} />
+                {side[0]} {mag.toFixed(2)} ×BW
               </span>
             );
           })}
+          <span className="ramp">
+            <span className="muted">r {GRF_FULL_SCALE}</span>
+            <b style={{ background: rampCss() }} />
+            <span className="muted">{GRF_FULL_SCALE} l</span>
+          </span>
         </div>
       )}
       <div className="viewport__legend">
