@@ -221,6 +221,15 @@ data colours (`--data-left` red #EA5A65, `--data-right` blue #4698C7) appear
 only on data marks and were validated for dark-surface contrast and
 colour-vision separation.
 
+**Cameras**: a perspective and an orthographic camera share one
+OrbitControls (re-pointed via `controls.object`). The view cube is a CSS 3D
+cube whose transform is the camera's world→view rotation conjugated by a Y
+flip (CSS y points down), written every frame from the render loop. Axis
+snaps keep the target and match the ortho frustum height to what the
+perspective camera showed (`d · tan(fov/2)`); top/bottom sit a hair off-axis
+because OrbitControls is singular straight down Y. Framing happens once,
+on the first dataset; later loads keep the user's camera.
+
 **Ghost layer**: every frame's skeleton and markers in two draw calls
 (one LineSegments, one Points), additively blended bone ink with opacity
 scaled to frame count, so dwell regions build up brighter. Built lazily on

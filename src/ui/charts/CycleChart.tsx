@@ -106,6 +106,18 @@ export function CycleChart({ curve, cursor, toeOff, height = 132 }: Props) {
       ctx.fillText('to', x + 3, PAD.t + 9);
     }
 
+    // Playhead: a faint full-height line per limb at its current cycle
+    // position, behind the data, so the dot on the curve is easy to find.
+    for (const s of series) {
+      const cur = cursor?.[s];
+      if (cur === undefined) continue;
+      const x = Math.round(X(cur)) + 0.5;
+      ctx.strokeStyle = css(s === 'left' ? '--data-left' : '--data-right');
+      ctx.globalAlpha = 0.35;
+      ctx.beginPath(); ctx.moveTo(x, PAD.t); ctx.lineTo(x, PAD.t + ph); ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
     for (const s of series) {
       const { mean, sd } = curve[s]!;
       const color = css(s === 'left' ? '--data-left' : '--data-right');
