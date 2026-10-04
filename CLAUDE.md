@@ -21,7 +21,8 @@ Run `npm test` and `npm run typecheck` before every commit.
 
 ```
 src/core/       types, vector math, signal processing, landmark aliases
-src/io/         one file per format + normalize.ts (lab frame) + index.ts router
+src/io/         one file per format + skeleton.ts (shared skeleton → markers)
+                + normalize.ts (lab frame) + index.ts router (asf/amc pairing)
 src/analysis/   context → segments → angles / events → spatiotemporal / com → report
 src/demo/       synthetic walker + scan (also the test fixtures)
 src/scene/      three.js viewport

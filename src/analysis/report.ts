@@ -10,7 +10,7 @@ import { cv, derivative, ensemble, mean, range, resample, std } from '../core/si
 import { computeAngles, type SideAngles } from './angles';
 import { computeCom } from './com';
 import { createContext, type AnalysisOptions } from './context';
-import { detectEvents, type Events, type Stride } from './events';
+import { detectEvents, rightOf, type Events, type Stride } from './events';
 import { buildSegments, type Quality } from './segments';
 import { strideParams, type StrideParams } from './spatiotemporal';
 
@@ -108,8 +108,8 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
   const dt = 1 / ctx.rate;
 
   const segs = buildSegments(ctx);
-  const angles = computeAngles(segs);
   const events = detectEvents(ctx);
+  const angles = computeAngles(segs, events.heading);
 
   if (!events.pelvis) warnings.push('no pelvis landmarks: gait events cannot be detected');
   if (events.strides.length === 0) warnings.push('no complete strides detected');
@@ -122,8 +122,10 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
 
   // Overground if the pelvis actually travelled; a treadmill keeps it put.
   const pel = events.pelvis;
+  // Net displacement misses a walker who loops back to the start, so also
+  // accept a sustained (smoothed) pelvis speed.
   const travel = pel ? Math.hypot(pel[pel.length - 1][0] - pel[0][0], pel[pel.length - 1][2] - pel[0][2]) : 0;
-  const overground = travel > 1;
+  const overground = travel > 1 || mean(events.speed) > 0.3;
 
   const sp = strideParams(ctx, events, overground);
   const strides = (side: Side) => events.strides.filter((s) => s.side === side);
@@ -247,11 +249,15 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
 
   // ── centre of mass ───────────────────────────────────────────────────
   const com = computeCom(ctx, segs, events.pelvis);
-  const comPer = (axis: 0 | 1 | 2) => {
+  // Per-stride excursion. Mediolateral is measured across the stride's own
+  // heading so that walking a bend doesn't read as sway.
+  const comPer = (axis: 'vertical' | 'lateral') => {
     const out: number[] = [];
     if (!com) return out;
     for (const st of strides('right').length ? strides('right') : strides('left')) {
-      out.push(range(com.path.slice(st.hs, st.next + 1).map((p) => p[axis])));
+      const right = rightOf(events.heading[Math.round((st.hs + st.next) / 2)]);
+      const seg = com.path.slice(st.hs, st.next + 1);
+      out.push(range(seg.map((p) => (axis === 'vertical' ? p[1] : p[0] * right[0] + p[2] * right[2]))));
     }
     return out;
   };
@@ -260,8 +266,8 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     id: 'com',
     label: 'centre of mass',
     metrics: [
-      { id: 'comVertical', label: 'vertical excursion', unit: 'cm', both: stat(comPer(1).map((v) => v * 100)), status: comStatus, note: com?.method },
-      { id: 'comLateral', label: 'mediolateral excursion', unit: 'cm', both: stat(comPer(2).map((v) => v * 100)), status: comStatus, note: com?.method },
+      { id: 'comVertical', label: 'vertical excursion', unit: 'cm', both: stat(comPer('vertical').map((v) => v * 100)), status: comStatus, note: com?.method },
+      { id: 'comLateral', label: 'mediolateral excursion', unit: 'cm', both: stat(comPer('lateral').map((v) => v * 100)), status: comStatus, note: com?.method },
     ],
   };
 

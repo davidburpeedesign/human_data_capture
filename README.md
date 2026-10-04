@@ -26,13 +26,28 @@ populated before you have data of your own.
 
 | type | formats |
 |---|---|
-| motion capture | `.bvh` · `.c3d` · `.csv` / `.tsv` marker trajectories |
+| motion capture | `.asf` + `.amc` · `.bvh` · `.c3d` · `.csv` / `.tsv` marker trajectories |
 | body scan | `.ply` · `.obj` · `.stl` (mesh or point cloud) |
 
 Drop files on the stage or use **open**. Units, up-axis and walking
 direction are inferred from the body itself. Marker names are mapped to
-canonical landmarks (Plug-in Gait, CAST, Qualisys and mixamo/CMU joint
-names out of the box); the sidebar shows what resolved.
+canonical landmarks (Plug-in Gait, CAST, Qualisys, the CMU marker set and
+mixamo/CMU joint names out of the box); the sidebar shows what resolved.
+
+### CMU Motion Capture Database
+
+[mocap.cs.cmu.edu](http://mocap.cs.cmu.edu) publishes each trial in three
+formats, and all three load with landmarks picked up automatically:
+
+| CMU files | what happens |
+|---|---|
+| `NN.asf` + `NN_MM.amc` | skeleton + trial. Drop both together, or the `.asf` once and then any number of that subject's `.amc` trials: `02_01.amc` is paired with `02.asf` by name. Virtual markers (knee/ankle med+lat, heel, toe, MT1/MT5, ASIS/PSIS) are attached to the bones, so every metric is available. AMC has no frame rate; CMU's 120 Hz is assumed. |
+| `NN_MM.c3d` | the raw 41-marker Vicon data. Waist markers `LFWT/RFWT/LBWT/RBWT` stand in for ASIS/PSIS (hip centres are estimated from them); DEC-format files, common in the database, are supported. The set has no medial knee/ankle or MT1 markers, so axial rotations and inversion are reported as `proxy`. |
+| `NN_MM.bvh` | community BVH conversions (`LHipJoint`, `LeftUpLeg`, ... naming) load like any other BVH. |
+
+Many CMU walks curve or turn; per-step measures (step length and width,
+foot progression, tibial rotation, COM sway) follow the walker's heading
+rather than a fixed axis.
 
 ## Analysis
 

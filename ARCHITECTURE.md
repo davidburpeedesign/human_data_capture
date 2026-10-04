@@ -95,8 +95,9 @@ resolution) happens once in `io/index.ts`. Analysis never sees a file format.
 
 | format | status | notes |
 |---|---|---|
+| ASF/AMC | ✓ | Acclaim skeleton + motion (CMU database). FK per the Acclaim spec (`world = parent · C · M · C⁻¹`), file units (1/L inch) → metres, 120 Hz default. Trials pair with skeletons by CMU file naming via a session registry. Shares the virtual-marker step with BVH (`io/skeleton.ts`). |
 | BVH | ✓ | FK → joint positions + orientations. Emits **virtual canonical markers** (epicondyles, malleoli, heel, MT1/MT5, ASIS/PSIS) rigidly attached to segments, so skeleton data and marker data share one analysis path. Assumes rest pose = neutral stance. |
-| C3D | ✓ points | Intel int/float, labels (+LABELS2), units, residual-based gaps. Analog (force plates, EMG) parsed in v1. DEC/MIPS rejected explicitly. |
+| C3D | ✓ points | Intel, DEC (VAX float) and MIPS int/float, labels (+LABELS2), units, residual-based gaps. Analog (force plates, EMG) parsed in v1. |
 | CSV/TSV | ✓ | flat `NAME_X` headers or split two-row headers; time column sets the rate. |
 | PLY / OBJ / STL | ✓ | via three.js loaders; STL/OBJ welded. Longest axis = up; mm/cm/m from stature. |
 | TRC (OpenSim) | planned | trivially a CSV variant |
@@ -104,6 +105,11 @@ resolution) happens once in `io/index.ts`. Analysis never sees a file format.
 
 `io/normalize.ts` infers the frame from the body: up = feet→pelvis, forward
 = pelvis displacement (or heel→toe on a treadmill). It needs no header trust.
+
+Within a trial, per-step measures use the **instantaneous heading**
+(`analysis/events.ts`): the pelvis's horizontal velocity low-passed at
+0.4 Hz, so curved and turning walks (common in CMU data) are measured in
+the walker's own frame.
 
 ---
 
@@ -200,7 +206,8 @@ exports, synthetic data, tests.
   (e.g. CMU mocap, Fukuchi 2018 running/walking set)
 - C3D analog: force plates → true contact/loading from GRF, COP path
 - TRC, glTF/FBX animation import
-- direction-change handling (walk out and back) and per-pass segmentation
+- per-pass segmentation for walk-out-and-back trials (headings already
+  follow curves; sharp 180° turns still produce a few odd steps)
 - static-trial calibration: subtract neutral offsets, functional HJC/knee axes
 
 **v2: morphology from scans**

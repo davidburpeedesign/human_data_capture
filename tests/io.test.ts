@@ -83,11 +83,16 @@ describe('csv markers', () => {
 });
 
 /** Minimal float C3D writer, just enough to round-trip points + labels. */
-function writeC3d(labels: string[], frames: number[][][], rate: number): ArrayBuffer {
+function writeC3d(labels: string[], frames: number[][][], rate: number, processor: 'intel' | 'dec' = 'intel'): ArrayBuffer {
   const params: number[] = [];
   const str = (s: string) => [...s].map((c) => c.charCodeAt(0));
   const i16 = (v: number) => [v & 0xff, (v >> 8) & 0xff];
-  const f32 = (v: number) => [...new Uint8Array(new Float32Array([v]).buffer)];
+  // DEC (VAX F) = IEEE bytes of 4·v with the two 16-bit words swapped.
+  const f32 = (v: number) => {
+    const b = [...new Uint8Array(new Float32Array([processor === 'dec' ? v * 4 : v]).buffer)];
+    return processor === 'dec' ? [b[2], b[3], b[0], b[1]] : b;
+  };
+  const putF32 = (dv: DataView, o: number, v: number) => f32(v).forEach((b, k) => dv.setUint8(o + k, b));
   const group = (id: number, name: string) => {
     params.push(name.length, -id & 0xff, ...str(name), ...i16(3), 0);
   };
@@ -112,17 +117,17 @@ function writeC3d(labels: string[], frames: number[][][], rate: number): ArrayBu
   v.setUint16(4, 0, true);
   v.setUint16(6, 1, true);
   v.setUint16(8, frames.length, true);
-  v.setFloat32(12, -1, true);
+  putF32(v, 12, -1);
   v.setUint16(16, dataStart, true);
-  v.setFloat32(20, rate, true);
+  putF32(v, 20, rate);
   const ps = 512;
   v.setUint8(ps + 2, paramBlocks);
-  v.setUint8(ps + 3, 84);
+  v.setUint8(ps + 3, processor === 'dec' ? 85 : 84);
   params.forEach((b, i) => v.setUint8(ps + 4 + i, b & 0xff));
   let o = (dataStart - 1) * 512;
   for (const f of frames) for (const p of f) {
-    v.setFloat32(o, p[0], true); v.setFloat32(o + 4, p[1], true); v.setFloat32(o + 8, p[2], true);
-    v.setFloat32(o + 12, p[3] ?? 0, true);
+    putF32(v, o, p[0]); putF32(v, o + 4, p[1]); putF32(v, o + 8, p[2]);
+    putF32(v, o + 12, p[3] ?? 0);
     o += 16;
   }
   return buf;
@@ -140,5 +145,14 @@ describe('c3d', () => {
     const l = clip.trajectories.get('LHEE')!.data;
     expect(l[3]).toBeCloseTo(0.11);
     expect(Number.isNaN(clip.trajectories.get('RHEE')!.data[3])).toBe(true);
+  });
+
+  it('reads DEC (VAX float) files, as in much of the CMU database', () => {
+    const buf = writeC3d(['LHEE'], [[[123.5, -42.25, 987]], [[0, 0, 0, -1]]], 120, 'dec');
+    const clip = parseC3d(buf);
+    expect(clip.rate).toBe(120);
+    const l = clip.trajectories.get('LHEE')!.data;
+    expect([l[0], l[1], l[2]].map((x) => +x.toFixed(5))).toEqual([0.1235, -0.04225, 0.987]);
+    expect(Number.isNaN(l[3])).toBe(true);
   });
 });

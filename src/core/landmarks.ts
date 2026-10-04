@@ -2,8 +2,10 @@
  * Landmark resolution: map whatever a lab or exporter named its markers onto
  * the canonical ids analysis asks for.
  *
- * Aliases cover Vicon Plug-in Gait / CAST-style labels, Qualisys and
- * OpenSim-ish names, and the virtual markers our own BVH importer emits.
+ * Aliases cover Vicon Plug-in Gait / CAST-style labels, the CMU mocap
+ * database's 41-marker set (waist markers LFWT/RFWT/LBWT/RBWT stand in for
+ * ASIS/PSIS), Qualisys and OpenSim-ish names, and the virtual markers our
+ * skeleton importers (BVH, ASF/AMC) emit.
  * Matching is case-insensitive and ignores separators and subject prefixes
  * (`Subject01:LHEE` → `lhee`). Anything unresolved simply stays unmapped:
  * each metric declares which landmarks it needs and reports itself as
@@ -16,9 +18,9 @@ type Aliases = Record<string, string[]>;
 
 /** `{s}` expands to the side letter (l / r) and the side word (left / right). */
 const SIDED: Aliases = {
-  ASIS: ['{s}asi', '{s}asis', '{s}_asis', '{side}asis', '{s}ias'],
-  PSIS: ['{s}psi', '{s}psis', '{side}psis', '{s}ips'],
-  HJC: ['{s}hjc', '{s}hip', '{side}hip', '{side}upleg', '{s}hipjoint', '{s}femurhead'],
+  ASIS: ['{s}asi', '{s}asis', '{s}_asis', '{side}asis', '{s}ias', '{s}fwt'],
+  PSIS: ['{s}psi', '{s}psis', '{side}psis', '{s}ips', '{s}bwt'],
+  HJC: ['{s}hjc', '{s}hip', '{side}hip', '{side}upleg', '{s}femurhead'],
   KNEE_LAT: ['{s}kne', '{s}knee', '{s}lkn', '{s}knl', '{s}lfe', '{s}kneelat', '{side}knee', '{side}leg'],
   KNEE_MED: ['{s}kneemed', '{s}mkn', '{s}knm', '{s}kne_med', '{s}mfe', '{s}kneem'],
   ANKLE_LAT: ['{s}ank', '{s}ankle', '{s}lma', '{s}anl', '{s}ankllat', '{s}anklelat', '{side}foot', '{side}ankle'],

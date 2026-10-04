@@ -4,15 +4,15 @@
  *   hip     flexion +, adduction +, internal rotation +
  *   knee    flexion +, adduction (varus) +, internal tibial rotation +
  *   ankle   dorsiflexion +, inversion + / eversion −, adduction +
- *   tibia   axial rotation of the shank in the lab, internal +
- *   fpa     foot progression angle, toe-out +
+ *   tibia   axial rotation of the shank vs. direction of travel, internal +
+ *   fpa     foot progression angle vs. direction of travel, toe-out +
  *
  * Joint angles use a Z-X-Y Cardan sequence of the distal frame relative to
  * the proximal (see `cardanZXY`). Left-side ab/adduction and rotation are
  * sign-flipped so that "internal" means the same thing on both legs.
  */
-import type { Mat3, Side } from '../core/types';
-import { DEG, cardanZXY, mul, transpose } from '../core/vec';
+import type { Mat3, Side, Vec3 } from '../core/types';
+import { DEG, cardanZXY, mul, rotY, transpose } from '../core/vec';
 import type { Quality, SegmentSeries, Segments } from './segments';
 
 export interface AngleSeries {
@@ -32,7 +32,17 @@ function joint(prox: SegmentSeries, dist: SegmentSeries) {
   return prox.frames.map((p, i) => cardanZXY(mul(transpose(p), dist.frames[i])));
 }
 
-export function computeAngles(segs: Segments): Record<Side, SideAngles> {
+/**
+ * Lab → walker frame: undo the heading's yaw so segment orientations are
+ * read relative to the direction of travel, not a fixed lab axis.
+ */
+function toWalkerFrame(heading: Vec3[]): Mat3[] {
+  return heading.map((h) => transpose(rotY(Math.atan2(-h[2], h[0]))));
+}
+
+export function computeAngles(segs: Segments, heading?: Vec3[]): Record<Side, SideAngles> {
+  const walker = heading ? toWalkerFrame(heading) : null;
+  const inWalker = (f: Mat3, i: number) => (walker ? mul(walker[i], f) : f);
   const out: Record<Side, SideAngles> = { left: {}, right: {} };
 
   for (const side of ['left', 'right'] as const) {
@@ -68,17 +78,20 @@ export function computeAngles(segs: Segments): Record<Side, SideAngles> {
       a.tibiaRot = {
         id: 'tibiaRot',
         label: 'tibial rotation',
-        values: shank.frames.map((f: Mat3) => s * cardanZXY(f)[2] * DEG),
+        values: shank.frames.map((f: Mat3, i) => s * cardanZXY(inWalker(f, i))[2] * DEG),
         quality: shank.quality,
       };
     }
 
     if (foot) {
-      // Heading of the foot's long axis on the ground plane vs. +X (travel).
+      // Heading of the foot's long axis on the ground plane vs. direction of travel.
       a.fpa = {
         id: 'fpa',
         label: 'foot progression',
-        values: foot.frames.map((f) => Math.atan2(s * f[6], f[0]) * DEG),
+        values: foot.frames.map((f, i) => {
+          const w = inWalker(f, i);
+          return Math.atan2(s * w[6], w[0]) * DEG;
+        }),
         quality: 'full',
       };
     }

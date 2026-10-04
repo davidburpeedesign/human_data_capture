@@ -2,14 +2,15 @@
  * Per-stride spatiotemporal parameters: the timing and distance skeleton
  * that every other metric hangs off.
  *
- * Distances are measured on the ground plane (X/Z). Step length uses both
+ * Distances are measured on the ground plane, along / across the walker's
+ * instantaneous heading so curved paths read correctly. Step length uses both
  * heels at the same instant, so it works on a treadmill too; stride length
  * on a treadmill is then the sum of consecutive steps, which equals belt
  * travel plus foot displacement without needing to know the belt speed.
  */
-import type { Side } from '../core/types';
+import type { Side, Vec3 } from '../core/types';
 import type { Ctx } from './context';
-import type { Events, Stride } from './events';
+import { rightOf, type Events, type Stride } from './events';
 
 export interface StrideParams {
   side: Side;
@@ -44,8 +45,11 @@ export function strideParams(ctx: Ctx, ev: Events, overground: boolean): StrideP
     const strideTime = (st.next - st.hs) * dt;
     const stanceTime = (st.to - st.hs) * dt;
 
-    const stepLength = heelO ? heel[st.hs][0] - heelO[st.hs][0] : NaN;
-    const stepWidth = heelO ? Math.abs(heel[st.hs][2] - heelO[st.hs][2]) : NaN;
+    // Separation in the walker's own frame at this instant (curve-safe).
+    const fwd = (i: number, a: Vec3, b: Vec3) => (a[0] - b[0]) * ev.heading[i][0] + (a[2] - b[2]) * ev.heading[i][2];
+    const right = rightOf(ev.heading[st.hs]);
+    const stepLength = heelO ? fwd(st.hs, heel[st.hs], heelO[st.hs]) : NaN;
+    const stepWidth = heelO ? Math.abs((heel[st.hs][0] - heelO[st.hs][0]) * right[0] + (heel[st.hs][2] - heelO[st.hs][2]) * right[2]) : NaN;
 
     let strideLength: number;
     if (overground) {
@@ -53,7 +57,7 @@ export function strideParams(ctx: Ctx, ev: Events, overground: boolean): StrideP
     } else {
       // Treadmill: this step plus the contralateral step that follows it.
       const nextOther = ev.heelStrikes[other(st.side)].find((h) => h > st.hs && h < st.next);
-      strideLength = heelO && nextOther !== undefined ? stepLength + (heelO[nextOther][0] - heel[nextOther][0]) : NaN;
+      strideLength = heelO && nextOther !== undefined ? stepLength + fwd(nextOther, heelO[nextOther], heel[nextOther]) : NaN;
       if (ctx.opts.treadmillSpeed) strideLength = ctx.opts.treadmillSpeed * strideTime;
     }
 
