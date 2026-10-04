@@ -22,6 +22,10 @@ interface Props {
   cutoff: number;
   onCutoff: (hz: number) => void;
   warnings: string[];
+  /** Loaded ASF/ASX skeletons, for re-binding the active .amc trial. */
+  skeletons: string[];
+  onSkeleton: (name: string) => void;
+  onLoadSkeleton: (file: File) => void;
 }
 
 const describe = (d: Dataset) =>
@@ -64,6 +68,15 @@ export function Sidebar(p: Props) {
           <button className="btn btn--ghost" onClick={() => p.onDemo('scan')}>+ demo scan</button>
         </div>
       </section>
+
+      {p.clip?.source && (
+        <SkeletonPicker
+          clip={p.clip}
+          skeletons={p.skeletons}
+          onSkeleton={p.onSkeleton}
+          onLoadSkeleton={p.onLoadSkeleton}
+        />
+      )}
 
       {p.clip && (
         <>
@@ -151,6 +164,51 @@ function LandmarkCoverage({ clip }: { clip: MotionClip }) {
             <span />
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Which skeleton an .amc trial is built on. Pairing by CMU file name is
+ * automatic, but datasets don't always follow it, so the binding is always
+ * visible and changeable here.
+ */
+function SkeletonPicker(p: {
+  clip: MotionClip;
+  skeletons: string[];
+  onSkeleton: (name: string) => void;
+  onLoadSkeleton: (file: File) => void;
+}) {
+  const src = p.clip.source!;
+  const how = { name: 'matched by name', guessed: 'no name match: check', chosen: 'chosen' }[src.matched];
+  return (
+    <section className="block">
+      <header className="block__head">
+        <span>skeleton</span>
+        <span className={src.matched === 'guessed' ? 'tag tag--proxy' : 'muted'}>{how}</span>
+      </header>
+      <div className="block__pad skel">
+        <select
+          value={src.skeleton}
+          onChange={(e) => p.onSkeleton(e.target.value)}
+          aria-label="skeleton for this trial"
+        >
+          {p.skeletons.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <label className="btn btn--ghost">
+          load .asx
+          <input
+            type="file"
+            accept=".asx,.asf"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) p.onLoadSkeleton(f);
+              e.target.value = '';
+            }}
+          />
+        </label>
       </div>
     </section>
   );

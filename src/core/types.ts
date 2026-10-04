@@ -46,6 +46,11 @@ export interface MotionClip {
    * analysis can ask for `R_HEEL` without knowing a lab called it `RHEE`.
    */
   landmarks: Partial<Record<LandmarkId, string>>;
+  /**
+   * Skeleton-driven trials (ASF/AMC) keep their raw motion and the name of
+   * the skeleton they were built on, so they can be rebuilt on another one.
+   */
+  source?: { text: string; skeleton: string; matched: 'name' | 'guessed' | 'chosen' };
   /** Treadmill belt speed (m/s), if the trial was on one. Enables stride length. */
   treadmillSpeed?: number;
   meta: Record<string, string | number>;

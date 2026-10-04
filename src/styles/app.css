@@ -183,6 +183,9 @@ button, input, select, label { font: inherit; letter-spacing: inherit; color: in
 .toggle { display: flex; align-items: center; gap: var(--sp-2); font-size: 12px; cursor: pointer; color: var(--text-muted); }
 .toggle:hover { color: var(--text-emphasis); }
 
+.skel { display: grid; grid-template-columns: 1fr auto; gap: var(--sp-2); align-items: center; }
+.skel select { min-width: 0; }
+
 .notes { margin: 0; padding: var(--sp-3) var(--sp-4) var(--sp-3) var(--sp-5); font-size: 11px; color: var(--text-muted); line-height: var(--lh-body); }
 
 /* landmark coverage grid */
