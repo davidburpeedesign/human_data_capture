@@ -112,6 +112,10 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
   const angles = computeAngles(segs, events.heading);
 
   if (!events.pelvis) warnings.push('no pelvis landmarks: gait events cannot be detected');
+  // Skeleton rigs with a hinge knee (CMU ASF) cannot express knee axial
+  // rotation; a measured 0° there would be an artefact, not a finding.
+  const kneeAxialLocked = clip.meta.knee_axial === 'locked';
+  if (kneeAxialLocked) warnings.push('skeleton knee is a hinge: knee axial rotation not available');
   if (events.strides.length === 0) warnings.push('no complete strides detected');
 
   for (const side of SIDES) {
@@ -234,14 +238,16 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
   };
 
   // ── tibial & knee rotation ───────────────────────────────────────────
+  const kneeAxial = (m: Metric): Metric =>
+    kneeAxialLocked ? { ...m, left: undefined, right: undefined, both: undefined, symmetry: undefined, status: 'unavailable', note: 'skeleton knee is a hinge (no axial dof)' } : m;
   const rotation: MetricGroup = {
     id: 'rotation',
     label: 'tibial & knee rotation',
     metrics: [
       sided('tibiaRotRom', 'tibial rotation rom (stance)', 'deg', perStride('tibiaRot', (v, st) => range(stance(v, st))), q('tibiaRot')),
       sided('tibiaRotMean', 'tibial rotation mean (stance)', 'deg', perStride('tibiaRot', (v, st) => mean(stance(v, st))), q('tibiaRot'), 'internal +'),
-      sided('kneeRotRom', 'knee rotation rom (stance)', 'deg', perStride('kneeRot', (v, st) => range(stance(v, st))), q('kneeRot')),
-      sided('kneeRotPeak', 'peak internal knee rotation', 'deg', perStride('kneeRot', (v, st) => Math.max(...stance(v, st))), q('kneeRot')),
+      kneeAxial(sided('kneeRotRom', 'knee rotation rom (stance)', 'deg', perStride('kneeRot', (v, st) => range(stance(v, st))), q('kneeRot'))),
+      kneeAxial(sided('kneeRotPeak', 'peak internal knee rotation', 'deg', perStride('kneeRot', (v, st) => Math.max(...stance(v, st))), q('kneeRot'))),
       sided('kneeFlexLoading', 'knee flexion (loading peak)', 'deg',
         perStride('kneeFlex', (v, st) => Math.max(...v.slice(st.hs, st.hs + Math.round(0.5 * (st.to - st.hs)) + 1))), q('kneeFlex')),
     ],
@@ -340,7 +346,7 @@ export function analyzeGait(clip: MotionClip, opts: Partial<AnalysisOptions> = {
     curve('ankleDorsi', 'ankle dorsiflexion', 'deg', series('ankleDorsi'), q('ankleDorsi')),
     curve('ankleInv', 'inversion (+) / eversion (−)', 'deg', series('ankleInv'), q('ankleInv')),
     curve('tibiaRot', 'tibial rotation', 'deg', series('tibiaRot'), q('tibiaRot')),
-    curve('kneeRot', 'knee rotation', 'deg', series('kneeRot'), q('kneeRot')),
+    curve('kneeRot', 'knee rotation', 'deg', kneeAxialLocked ? { left: undefined, right: undefined } : series('kneeRot'), q('kneeRot')),
     curve('fpa', 'foot progression', 'deg', series('fpa'), q('fpa')),
     curve('comY', 'com height', 'cm',
       { left: com?.path.map((p) => p[1] * 100), right: com?.path.map((p) => p[1] * 100) }, comStatus),

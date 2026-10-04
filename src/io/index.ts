@@ -4,8 +4,9 @@
  * format-only; the shared post-processing lives here, once.
  *
  * ASF/AMC is the one paired format: an .amc trial is meaningless without
- * its .asf skeleton. Skeletons are kept in a session registry so a subject's
- * .asf can be dropped once and its trials afterwards, or all together.
+ * its skeleton (.asf, or .asx as the CMU database names it). Skeletons are
+ * kept in a session registry so a subject's skeleton can be dropped once and
+ * its trials afterwards, or all together.
  */
 import type { Dataset, MotionClip } from '../core/types';
 import { resolveLandmarks } from '../core/landmarks';
@@ -16,7 +17,7 @@ import { parseMarkersCsv } from './markersCsv';
 import { normalizeClip } from './normalize';
 import { parseScan } from './scan';
 
-export const ACCEPT = '.bvh,.asf,.amc,.c3d,.csv,.tsv,.txt,.ply,.obj,.stl';
+export const ACCEPT = '.bvh,.asf,.asx,.amc,.c3d,.csv,.tsv,.txt,.ply,.obj,.stl';
 
 export function prepareClip(raw: MotionClip): MotionClip {
   const resolved = resolveLandmarks(raw);
@@ -26,14 +27,16 @@ export function prepareClip(raw: MotionClip): MotionClip {
 }
 
 const ext = (name: string) => name.split('.').pop()?.toLowerCase() ?? '';
+/** Acclaim skeletons: `.asf`, or `.asx` as the CMU database ships them. */
+const isSkeleton = (name: string) => ext(name) === 'asf' || ext(name) === 'asx';
 const stem = (name: string) => name.replace(/^.*[\\/]/, '').replace(/\.[^.]+$/, '');
 
-/** Skeletons loaded this session, by file stem (CMU: `02` for `02.asf`). */
+/** Skeletons loaded this session, by file stem (CMU: `02` for `02.asx`). */
 const skeletons = new Map<string, AsfSkeleton>();
 
 /**
  * Find the skeleton for an .amc trial. CMU names trials `<subject>_<trial>`,
- * so `02_01.amc` belongs to `02.asf`; failing that, a lone loaded skeleton
+ * so `02_01.amc` belongs to `02.asx`; failing that, a lone loaded skeleton
  * is the only sensible match.
  */
 export function skeletonFor(amcName: string): AsfSkeleton | undefined {
@@ -54,7 +57,7 @@ export async function importFile(file: File): Promise<Dataset> {
       return prepareClip(parseBvh(await file.text(), file.name));
     case 'amc': {
       const skel = skeletonFor(file.name);
-      if (!skel) throw new Error(`no skeleton for ${file.name}: load its .asf too`);
+      if (!skel) throw new Error(`no skeleton for ${file.name}: load its .asf / .asx too`);
       return prepareClip(parseAmc(await file.text(), skel, file.name));
     }
     case 'c3d':
@@ -84,7 +87,7 @@ export interface ImportResult {
  */
 export async function importFiles(files: File[]): Promise<ImportResult> {
   const result: ImportResult = { datasets: [], skeletons: [], errors: [] };
-  for (const f of files.filter((f) => ext(f.name) === 'asf')) {
+  for (const f of files.filter((f) => isSkeleton(f.name))) {
     try {
       registerSkeleton(await f.text(), f.name);
       result.skeletons.push(f.name);
@@ -92,7 +95,7 @@ export async function importFiles(files: File[]): Promise<ImportResult> {
       result.errors.push(`${f.name}: ${(e as Error).message}`);
     }
   }
-  for (const f of files.filter((f) => ext(f.name) !== 'asf')) {
+  for (const f of files.filter((f) => !isSkeleton(f.name))) {
     try {
       result.datasets.push(await importFile(f));
     } catch (e) {

@@ -17,7 +17,9 @@ describe('gait analysis on the synthetic walker (known ground truth)', () => {
   });
 
   it('recovers cadence, speed and stride length', () => {
-    expect(metric(report, 'cadence').both!.mean).toBeCloseTo(truth.strideRate * 2, -0.5);
+    // Within 2 %: the walker adds 2 % stride-time jitter, so the realised
+    // cadence scatters around the nominal one.
+    expect(Math.abs(metric(report, 'cadence').both!.mean / (truth.strideRate * 2) - 1)).toBeLessThan(0.02);
     expect(metric(report, 'speed').both!.mean).toBeCloseTo(truth.speed, 1);
     expect(metric(report, 'strideLength').both!.mean).toBeCloseTo((truth.speed * 60) / truth.strideRate, 1);
   });
