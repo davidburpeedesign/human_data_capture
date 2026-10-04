@@ -15,6 +15,10 @@ import type { Dataset, MotionClip, Vec3 } from '../core/types';
 import type { GaitReport } from '../analysis/report';
 import type { Layers } from '../ui/Sidebar';
 import { track } from '../core/landmarks';
+import type { Side } from '../core/types';
+
+/** Metres of arrow per body weight: 1 BW ≈ a third of standing height. */
+const GRF_SCALE = 0.6;
 
 interface Props {
   dataset: Dataset | null;
@@ -36,6 +40,7 @@ interface Stage {
   markers: THREE.Points | null;
   bones: THREE.LineSegments | null;
   comDot: THREE.Mesh | null;
+  grfArrows: Record<Side, THREE.ArrowHelper> | null;
   comTrail: THREE.Line | null;
   footprints: THREE.Group | null;
   names: string[];
@@ -101,7 +106,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
 
     stage.current = {
       renderer, scene, camera, controls, grid, content,
-      markers: null, bones: null, comDot: null, comTrail: null, footprints: null,
+      markers: null, bones: null, comDot: null, comTrail: null, footprints: null, grfArrows: null,
       names: [], bonePairs: [], lastFollowX: NaN,
     };
 
@@ -139,7 +144,7 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     const s = stage.current;
     if (!s) return;
     disposeGroup(s.content);
-    Object.assign(s, { markers: null, bones: null, comDot: null, comTrail: null, footprints: null, names: [], bonePairs: [], lastFollowX: NaN });
+    Object.assign(s, { markers: null, bones: null, comDot: null, comTrail: null, footprints: null, grfArrows: null, names: [], bonePairs: [], lastFollowX: NaN });
     if (!dataset) return;
 
     const bone = new THREE.Color(css('--mx-bone'));
@@ -187,7 +192,10 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
   useEffect(() => {
     const s = stage.current;
     if (!s || !dataset || dataset.kind !== 'motion' || !report) return;
-    for (const o of [s.comTrail, s.comDot, s.footprints]) if (o) { s.content.remove(o); disposeGroup(o); }
+    for (const o of [s.comTrail, s.comDot, s.footprints, ...(s.grfArrows ? Object.values(s.grfArrows) : [])]) {
+      if (o) { s.content.remove(o); disposeGroup(o); }
+    }
+    s.grfArrows = null;
 
     if (report.com) {
       const path = report.com.path;
@@ -199,6 +207,18 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
     }
 
     s.footprints = footprintGroup(dataset, report);
+
+    if (report.grf) {
+      // One arrow per foot in its limb colour. Created once per report;
+      // per-frame updates only move, aim and scale them.
+      const arrow = (side: Side) => {
+        const a = new THREE.ArrowHelper(new THREE.Vector3(0, 1, 0), new THREE.Vector3(), 0.5, css(side === 'left' ? '--data-left' : '--data-right'));
+        a.visible = false;
+        return a;
+      };
+      s.grfArrows = { left: arrow('left'), right: arrow('right') };
+      s.content.add(s.grfArrows.left, s.grfArrows.right);
+    }
     s.content.add(s.footprints);
   }, [dataset, report]);
 
@@ -236,6 +256,18 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
       s.comDot.visible = s.comTrail.visible = layers.com;
     }
     if (s.footprints) s.footprints.visible = layers.footprints;
+    if (s.grfArrows && report?.grf) {
+      for (const side of ['left', 'right'] as const) {
+        const a = s.grfArrows[side];
+        const F = report.grf.foot[side][f], cop = report.grf.cop[side][f];
+        const mag = Math.hypot(F[0], F[1], F[2]);
+        a.visible = layers.grf && !!cop && mag > 0.02;
+        if (!a.visible || !cop) continue;
+        a.position.set(cop[0], cop[1], cop[2]);
+        a.setDirection(new THREE.Vector3(F[0] / mag, F[1] / mag, F[2] / mag));
+        a.setLength(mag * GRF_SCALE, 0.07, 0.04);
+      }
+    }
     s.grid.visible = layers.grid;
 
     // Follow: slide camera and target with the subject, keep user's orbit.
@@ -268,6 +300,20 @@ export function Viewport({ dataset, frame, report, layers, onDrop }: Props) {
       <span className="tick tick--tr" />
       <span className="tick tick--bl" />
       <span className="tick tick--br" />
+      {report?.grf && layers.grf && dataset?.kind === 'motion' && (
+        <div className="viewport__hud">
+          <span className="muted">grf (est.)</span>
+          {(['left', 'right'] as const).map((side) => {
+            const F = report.grf!.foot[side][Math.max(0, Math.min(frame, dataset.frameCount - 1))];
+            return (
+              <span key={side}>
+                <i style={{ background: `var(--data-${side})` }} />
+                {side[0]} {F[1].toFixed(2)} ×BW
+              </span>
+            );
+          })}
+        </div>
+      )}
       <div className="viewport__legend">
         <span>x anterior · y superior · z right</span>
         <span className="muted">drag to orbit · scroll to zoom · drop .bvh .asx+.amc .c3d .csv .ply .obj .stl</span>

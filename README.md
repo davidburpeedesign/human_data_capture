@@ -65,6 +65,7 @@ stance, and a knee angle that matches the trial's own `ltibia` channel.
 | pronation / supination | peak eversion, eversion excursion, time to peak, eversion velocity, pattern |
 | tibial & knee rotation | tibial rotation rom / mean, knee rotation rom / peak, loading knee flexion |
 | centre of mass | 3d trajectory, vertical and mediolateral excursion |
+| ground reaction force (estimated) | per-foot 3d vector from COM acceleration (×BW): vertical loading / push-off peaks, midstance minimum, loading rate, braking, propulsion, medial; vertical / fore-aft / mediolateral curves; vector arrows in the 3d view |
 | variability | cv % of stride time, stride length, contact, swing, step width |
 | coordination | inter-limb phase, phase coordination index, symmetry indices |
 | scan | stature, width, depth, area, volume, girth profile, named girths |
