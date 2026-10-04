@@ -17,14 +17,13 @@
   --mx-coral-dim:   #b76a6a;
 
   /* Data scheme — imagery and charts only, never UI chrome. Left/right
-     limb pair: deep maroon / deep navy, chosen for the brand. They separate
-     well from each other (incl. colour-vision deficiency) but sit at ~1.15:1
-     against the dark chart surface, so charts keep their tooltips and the
-     metric tables as the readable fallback. */
-  --mx-data-maroon: #50090f;
-  --mx-data-navy:   #111970;
-  --data-left:      var(--mx-data-maroon);
-  --data-right:     var(--mx-data-navy);
+     limb pair: coral red / blue, chosen for the brand. Both pass the dark-
+     surface lightness, chroma, contrast (>= 3:1) and colour-vision
+     separation checks. */
+  --mx-data-red:    #ea5a65;
+  --mx-data-blue:   #4698c7;
+  --data-left:      var(--mx-data-red);
+  --data-right:     var(--mx-data-blue);
 
   /* Bone alpha ramp */
   --mx-bone-04: rgba(228,227,223,0.04);

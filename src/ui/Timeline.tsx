@@ -65,8 +65,9 @@ export function Timeline({ clip, report, frame, playing, speed, onFrame, onPlay,
       }
     }
 
-    // Playhead: the one coral element on the track.
-    ctx.fillStyle = css('--accent');
+    // Playhead in white, not the coral accent: coral sits too close to the
+    // left-stance red to read as a separate mark on this track.
+    ctx.fillStyle = css('--text-emphasis');
     ctx.fillRect(Math.round(x(frame)) - 1, 0, 2, h);
   }, [clip, report, frame]);
 
