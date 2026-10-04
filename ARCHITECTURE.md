@@ -202,9 +202,18 @@ the double pass), 6 Hz default, adjustable in the sidebar.
 
 Visual rules, from the MORPHXGEN language: `#222` void, bone ink, hairline
 grids, square corners, corner-tick frame on the stage, all lowercase. Coral
-is an indicator only (active item, playhead, current COM, focus). Limb data
-colours (`--data-left` blue, `--data-right` amber) appear only on data marks
-and were validated for dark-surface contrast and colour-vision separation.
+is an indicator only (active item, current COM, focus); the timeline
+playhead is white because coral sits too close to the left-limb red. Limb
+data colours (`--data-left` red #EA5A65, `--data-right` blue #4698C7) appear
+only on data marks and were validated for dark-surface contrast and
+colour-vision separation.
+
+**Magnitude ramp** (`core/colormap.ts`): anything whose colour encodes "how
+much" uses one diverging ramp around a near-black zero, mint → blue → navy →
+black → maroon → red → blush. The limb colours sit inside it, so a per-side
+magnitude runs from black (nothing; fuses with the void) toward that side's
+own hue. Used by the GRF arrows (|F|, full scale 1.5 ×BW), the HUD legend
+and the per-foot force strips on the stance timeline.
 
 ---
 
