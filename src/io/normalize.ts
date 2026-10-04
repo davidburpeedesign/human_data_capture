@@ -10,7 +10,7 @@
  */
 import type { LandmarkId, MotionClip, Vec3 } from '../core/types';
 import { track } from '../core/landmarks';
-import { cross, dot, len, norm, sub } from '../core/vec';
+import { RAD, cross, dot, len, norm, sub } from '../core/vec';
 
 function meanPoint(clip: MotionClip, ids: LandmarkId[]): Vec3 | null {
   let sx = 0, sy = 0, sz = 0, n = 0;
@@ -117,5 +117,58 @@ export function normalizeClip(clip: MotionClip, opts: { unitScale?: number } = {
     trajectories.set(name, { ...t, data: d });
   }
 
-  return { ...clip, trajectories, meta: { ...clip.meta, unit_scale: unit } };
+  const tilt = levelFloor({ ...clip, trajectories });
+
+  return { ...clip, trajectories, meta: { ...clip.meta, unit_scale: unit, floor_tilt_deg: +tilt.toFixed(2) } };
+}
+
+/**
+ * Level the walking surface along the direction of travel, in place.
+ *
+ * Capture volumes are rarely calibrated perfectly level, and skeleton fits
+ * drift: CMU trials can climb a few cm over a 4 m walk. Left alone that
+ * slope leaks into every height (COM vertical excursion picks up the climb
+ * as if it were bob). Fit a line through the lowest foot point in each
+ * 20 cm of travel and rotate it out. Returns the correction, degrees.
+ *
+ * Only pitch along the path is observable from one walking line; on a
+ * treadmill (no travel) nothing is changed.
+ */
+function levelFloor(clip: MotionClip): number {
+  const feet = FEET.map((id) => track(clip, id)).filter((t): t is NonNullable<typeof t> => !!t);
+  if (!feet.length) return 0;
+  const BIN = 0.2;
+  const low = new Map<number, number>();
+  for (const t of feet) {
+    for (let i = 0; i < t.data.length; i += 3) {
+      const x = t.data[i], y = t.data[i + 1];
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      const b = Math.floor(x / BIN);
+      low.set(b, Math.min(low.get(b) ?? Infinity, y));
+    }
+  }
+  if (low.size < 5) return 0;
+  // Least-squares slope of floor height against forward position.
+  const xs = [...low.keys()].map((b) => (b + 0.5) * BIN);
+  const ys = [...low.values()];
+  const mx = xs.reduce((a, v) => a + v, 0) / xs.length;
+  const my = ys.reduce((a, v) => a + v, 0) / ys.length;
+  let sxy = 0, sxx = 0;
+  xs.forEach((x, k) => { sxy += (x - mx) * (ys[k] - my); sxx += (x - mx) ** 2; });
+  const theta = Math.atan(sxy / sxx);
+  // Ignore noise-level slopes, and refuse to "level" a genuine ramp.
+  if (!Number.isFinite(theta) || Math.abs(theta) < 0.1 * RAD || Math.abs(theta) > 8 * RAD) return 0;
+  const c = Math.cos(theta), sn = Math.sin(theta);
+  let floor = Infinity;
+  for (const t of clip.trajectories.values()) {
+    const d = t.data;
+    for (let i = 0; i < d.length; i += 3) {
+      const x = d[i], y = d[i + 1];
+      d[i] = x * c + y * sn;
+      d[i + 1] = -x * sn + y * c;
+    }
+  }
+  for (const t of feet) for (let i = 1; i < t.data.length; i += 3) if (Number.isFinite(t.data[i])) floor = Math.min(floor, t.data[i]);
+  for (const t of clip.trajectories.values()) for (let i = 1; i < t.data.length; i += 3) t.data[i] -= floor;
+  return theta / RAD;
 }

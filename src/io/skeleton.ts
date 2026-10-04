@@ -167,15 +167,23 @@ function emitVirtualMarkers(
     }
 
     if (j.ankle >= 0 && j.toe >= 0) {
+      // Build the foot in the shank's frame, not the world's: rest pose is
+      // the neutral the analysis zeroes against, and some rigs (CMU ASF)
+      // stand with legs splayed ~20°. A world-level foot under a splayed
+      // tibia would read as 20° of inversion once the leg comes vertical.
+      const legUp = j.knee >= 0 ? norm(sub(rest[j.knee], rest[j.ankle])) : up;
+      const footRight = norm(sub(right, scale(legUp, dot3(right, legUp))));
+      const footFwd = norm(cross(legUp, footRight));
+      const footLat = scale(footRight, side === 'R' ? 1 : -1);
       const toeRel = sub(rest[j.toe], rest[j.ankle]);
-      const footLen = Math.hypot(toeRel[0] - up[0] * dot3(toeRel, up), toeRel[1] - up[1] * dot3(toeRel, up), toeRel[2] - up[2] * dot3(toeRel, up));
-      const drop = dot3(toeRel, up); // negative: toe joint below ankle
-      // Heel: under the ankle at toe height, a quarter foot-length back.
-      const heel = add(scale(up, drop), scale(forward, -0.25 * footLen));
+      const drop = dot3(toeRel, legUp); // negative: toe joint below ankle
+      const footLen = len(sub(toeRel, scale(legUp, drop)));
+      // Heel: below the ankle at toe level, a quarter foot-length back.
+      const heel = add(scale(legUp, drop), scale(footFwd, -0.25 * footLen));
       emit(`${side}_HEEL`, j.ankle, heel);
       emit(`${side}_TOE`, j.ankle, toeRel);
-      emit(`${side}_MT1`, j.ankle, add(add(toeRel, scale(lateral, -0.22 * footLen)), scale(forward, -0.08 * footLen)));
-      emit(`${side}_MT5`, j.ankle, add(add(toeRel, scale(lateral, 0.25 * footLen)), scale(forward, -0.18 * footLen)));
+      emit(`${side}_MT1`, j.ankle, add(add(toeRel, scale(footLat, -0.22 * footLen)), scale(footFwd, -0.08 * footLen)));
+      emit(`${side}_MT5`, j.ankle, add(add(toeRel, scale(footLat, 0.25 * footLen)), scale(footFwd, -0.18 * footLen)));
     }
 
     for (const part of ['shoulder', 'elbow', 'wrist'] as const) {

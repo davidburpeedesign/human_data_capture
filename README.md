@@ -47,7 +47,13 @@ formats, and all three load with landmarks picked up automatically:
 
 Many CMU walks curve or turn; per-step measures (step length and width,
 foot progression, tibial rotation, COM sway) follow the walker's heading
-rather than a fixed axis.
+rather than a fixed axis. A slightly tilted capture floor (07_01 climbs
+~0.9°) is levelled before heights are measured. CMU knees are hinges, so
+knee axial rotation is reported as unavailable for ASF/AMC trials.
+
+Subject 07's skeleton and walk `07_01` are checked in under
+`tests/fixtures/` and tested end to end: cadence, stride and step length,
+stance, and a knee angle that matches the trial's own `ltibia` channel.
 
 ## Analysis
 

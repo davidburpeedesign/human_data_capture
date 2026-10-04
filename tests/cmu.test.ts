@@ -3,8 +3,10 @@ import { describe, expect, it } from 'vitest';
 import { parseAmc, parseAsf } from '../src/io/asf';
 import { importFiles, prepareClip, registerSkeleton, skeletonFor } from '../src/io/index';
 import ASX from './fixtures/07.asx?raw'; // real CMU subject 07 skeleton
+import AMC_07_01 from './fixtures/07_01.amc?raw'; // real CMU walk, subject 07 trial 01
 import { resolveLandmarks } from '../src/core/landmarks';
 import { analyzeGait, type GaitReport } from '../src/analysis/report';
+import { lowpass } from '../src/core/signal';
 import { syntheticWalk } from '../src/demo/synthetic';
 import type { MotionClip, Trajectory } from '../src/core/types';
 
@@ -203,6 +205,59 @@ describe('real cmu skeleton (subject 07, .asx)', () => {
     expect(y('L_HJC')).toBeLessThan(0.9);
     expect(y('HEAD')).toBeGreaterThan(1.3);
     expect(y('HEAD')).toBeLessThan(1.6);
+  });
+});
+
+describe('real cmu walk (07_01.amc on 07.asx)', () => {
+  const clip = prepareClip(parseAmc(AMC_07_01, parseAsf(ASX, '07.asx'), '07_01.amc'));
+  const report = analyzeGait(clip);
+  const m = (id: string) => report.groups.flatMap((g) => g.metrics).find((x) => x.id === id)!;
+
+  it('finds strides on both sides of a 2.6 s walk', () => {
+    expect(clip.frameCount).toBe(316);
+    expect(report.overground).toBe(true);
+    expect(report.events.strides.filter((s) => s.side === 'left').length).toBeGreaterThanOrEqual(1);
+    expect(report.events.strides.filter((s) => s.side === 'right').length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('gives normal-walking spatiotemporal values that agree with each other', () => {
+    const cadence = m('cadence').both!.mean, stride = m('strideLength').both!.mean, step = m('stepLength').both!.mean;
+    expect(cadence).toBeGreaterThan(100);
+    expect(cadence).toBeLessThan(120);
+    expect(stride).toBeGreaterThan(1.3);
+    expect(stride).toBeLessThan(1.7);
+    // Regression guard: early heel-strike detection once gave 0.37 m steps.
+    expect(step / stride).toBeGreaterThan(0.4);
+    expect(step / stride).toBeLessThan(0.55);
+    expect(m('stancePct').both!.mean).toBeGreaterThan(52);
+    expect(m('stancePct').both!.mean).toBeLessThan(66);
+  });
+
+  it('reproduces the knee angle stored in the trial', () => {
+    const tibia: number[] = [];
+    for (const line of AMC_07_01.split(/\r?\n/)) if (line.startsWith('ltibia ')) tibia.push(+line.split(/\s+/)[1]);
+    const knee = report.angles.left.kneeFlex.values;
+    // Markers are low-passed at 6 Hz before angles are computed; filter the
+    // reference the same way, and skip the filter's edge frames.
+    const ref = lowpass(tibia, clip.rate, 6);
+    for (let i = 10; i < tibia.length - 10; i++) expect(Math.abs(knee[i] - ref[i])).toBeLessThan(2);
+  });
+
+  it('has no rest-pose inversion offset from the splayed CMU legs', () => {
+    expect(Math.abs(m('peakEversion').both!.mean)).toBeLessThan(6);
+  });
+
+  it('levels the slightly tilted floor before measuring COM bob', () => {
+    expect(Math.abs(+clip.meta.floor_tilt_deg)).toBeGreaterThan(0.5);
+    expect(Math.abs(+clip.meta.floor_tilt_deg)).toBeLessThan(2);
+    expect(m('comVertical').both!.mean).toBeGreaterThan(2);
+    expect(m('comVertical').both!.mean).toBeLessThan(5);
+  });
+
+  it('reports knee axial rotation as unavailable for a hinge-knee rig', () => {
+    expect(clip.meta.knee_axial).toBe('locked');
+    expect(m('kneeRotRom').status).toBe('unavailable');
+    expect(m('tibiaRotRom').status).toBe('ok');
   });
 });
 

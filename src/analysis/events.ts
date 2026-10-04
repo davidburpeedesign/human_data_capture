@@ -97,9 +97,11 @@ export function detectEvents(ctx: Ctx): Events {
 
     const heelRel = heel.map((h, i) => along(h, i));
     const toeRel = toe.map((t, i) => -along(t, i));
-    const win = Math.round(0.15 * ctx.rate);
-    heelStrikes[side] = findPeaks(heelRel, minGap, prominence).map((h) => refineContact(heel, toe, h, win, 'on'));
-    toeOffs[side] = findPeaks(toeRel, minGap, prominence).map((t) => refineContact(heel, toe, t, win, 'off'));
+    // Both signals fall while the foot is planted: heel forward of pelvis
+    // shrinks after contact; toe forward of pelvis shrinks until lift-off.
+    const toeAlong = toeRel.map((v) => -v);
+    heelStrikes[side] = findPeaks(heelRel, minGap, prominence).map((h) => refineContact(heelRel, ctx.rate, h, 'on'));
+    toeOffs[side] = findPeaks(toeRel, minGap, prominence).map((t) => refineContact(toeAlong, ctx.rate, t, 'off'));
 
     const hs = heelStrikes[side];
     for (let k = 0; k + 1 < hs.length; k++) {
@@ -119,25 +121,37 @@ export function detectEvents(ctx: Ctx): Events {
 }
 
 /**
- * Zeni events lead true contact slightly, because the heel decelerates
- * before it lands. Snap each event to the frame the foot's lowest marker
- * crosses 1 cm above its floor level, if that happens within ±`win`
- * frames. Using the lower of heel and toe keeps forefoot strikers working.
+ * Zeni peaks mark where the foot moves *with* the pelvis (zero relative
+ * velocity), which is a little before a heel lands and a little after a toe
+ * lifts. Planted, a foot moves backward relative to the pelvis at walking
+ * speed (or belt speed, on a treadmill). So snap each event to where the
+ * signal's slope joins / leaves that stance slope: contact is the first
+ * frame after the peak reaching 80 % of it, lift-off the last frame before.
+ *
+ * Velocity-based on purpose. Height thresholds misfire whenever the swing
+ * heel skims low over the floor, which skeleton-derived heels (CMU ASF/AMC)
+ * routinely do while still travelling at several m/s.
  */
-function refineContact(heel: Vec3[], toe: Vec3[], frame: number, win: number, edge: 'on' | 'off'): number {
-  const n = heel.length;
-  const low = (i: number) => Math.min(heel[i][1], toe[i][1]);
-  const a = Math.max(0, frame - win), b = Math.min(n - 1, frame + win);
-  let floor = Infinity;
-  // Floor level from the stance side of the event: after contact, before lift.
-  const s0 = edge === 'on' ? frame : Math.max(0, frame - 2 * win);
-  const s1 = edge === 'on' ? Math.min(n - 1, frame + 2 * win) : frame;
-  for (let i = s0; i <= s1; i++) floor = Math.min(floor, low(i));
-  const thresh = floor + 0.01;
-  if (edge === 'on') {
-    for (let i = a; i <= b; i++) if (low(i) < thresh) return i;
-  } else {
-    for (let i = b; i >= a; i--) if (low(i) < thresh) return i;
+function refineContact(signal: number[], rate: number, frame: number, edge: 'on' | 'off'): number {
+  const n = signal.length;
+  const slope = (i: number) => (signal[Math.min(n - 1, i + 1)] - signal[Math.max(0, i - 1)]) * rate / 2;
+  // Stance slope: median over 0.1–0.25 s into stance from the peak.
+  const dir = edge === 'on' ? 1 : -1;
+  const near = Math.round(0.1 * rate), far = Math.round(0.25 * rate);
+  const samples: number[] = [];
+  for (let k = near; k <= far; k++) {
+    const i = frame + dir * k;
+    if (i > 0 && i < n - 1) samples.push(slope(i));
+  }
+  if (samples.length < 3) return frame;
+  samples.sort((x, y) => x - y);
+  const stance = samples[samples.length >> 1];
+  // Stance slope is negative for both signals (heel and toe recede).
+  if (!(stance < 0)) return frame;
+  for (let k = 0; k <= far; k++) {
+    const i = frame + dir * k;
+    if (i <= 0 || i >= n - 1) break;
+    if (slope(i) <= 0.8 * stance) return i;
   }
   return frame;
 }

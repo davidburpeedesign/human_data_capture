@@ -105,6 +105,9 @@ resolution) happens once in `io/index.ts`. Analysis never sees a file format.
 
 `io/normalize.ts` infers the frame from the body: up = feet→pelvis, forward
 = pelvis displacement (or heel→toe on a treadmill). It needs no header trust.
+It then levels the walking surface: a line through the lowest foot point per
+20 cm of travel is rotated flat (0.1–8°, recorded as `meta.floor_tilt_deg`),
+so a tilted capture volume doesn't read as COM bob.
 
 Within a trial, per-step measures use the **instantaneous heading**
 (`analysis/events.ts`): the pelvis's horizontal velocity low-passed at
@@ -122,8 +125,10 @@ missing). Nothing is silently guessed.
 
 ### 6.1 Events (`analysis/events.ts`)
 - **Heel strike / toe off:** Zeni et al. 2008 (heel furthest ahead of / toe
-  furthest behind the pelvis), refined to the frame the foot's lowest marker
-  crosses 1 cm above floor level. Works on treadmill and overground.
+  furthest behind the pelvis, along the instantaneous heading), refined by
+  velocity: contact is where the heel's motion relative to the pelvis joins
+  the stance slope (80 % of it), lift-off where the toe's leaves it. Works on
+  treadmill and overground, and is immune to a swing heel skimming the floor.
 - **Foot flat / heel off:** from heel→toe pitch vs. the median stance pitch.
 
 ### 6.2 Requested kinematic morphology
@@ -231,7 +236,12 @@ exports, synthetic data, tests.
   and not diagnostic.
 - Without medial markers, axial rotations fall back to neighbouring segment
   axes and are flagged `proxy`.
-- BVH virtual markers inherit the rig: a retargeted skeleton's ankle is not
-  an anatomical ankle.
+- Skeleton virtual markers inherit the rig: a retargeted skeleton's ankle is
+  not an anatomical ankle. The rest pose is taken as neutral; the foot is
+  built in the shank's frame so splayed rest legs (CMU) add no inversion.
+- Rigs with a hinge knee (CMU ASF: tibia `dof rx`) cannot express knee axial
+  rotation; it is reported `unavailable` (`meta.knee_axial = 'locked'`).
+  Tibial rotation, which comes from the hip, is still measured.
+- Foot progression from a skeleton is only as good as the fit's foot yaw.
 - The synthetic walker is a test fixture, not normative data. Its joint
   curves are plausible but not a reference gait.

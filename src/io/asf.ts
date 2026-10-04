@@ -225,6 +225,28 @@ export function parseAmc(text: string, skel: AsfSkeleton, name = 'trial.amc', ra
     rate,
     name,
     format: 'amc',
-    meta: { skeleton: skel.name, bones: B, rate_assumed: rate },
+    meta: {
+      skeleton: skel.name,
+      bones: B,
+      rate_assumed: rate,
+      ...(kneeAxialLocked(skel) ? { knee_axial: 'locked' } : {}),
+    },
+  });
+}
+
+/**
+ * True when neither tibia can twist about its own long axis. CMU skeletons
+ * model the knee as a 1-dof hinge (`dof rx`), so knee axial rotation is
+ * zero by construction there, and analysis should say so rather than
+ * report a measured 0°.
+ */
+function kneeAxialLocked(skel: AsfSkeleton): boolean {
+  const tibias = skel.bones.filter((b) => /^[lr](tibia|lowleg|lowerleg|shin)$/.test(b.name));
+  if (!tibias.length) return false;
+  return tibias.every((b) => {
+    // The axial axis is whichever local axis the bone direction runs along.
+    const local = apply(b.Cinv, b.direction).map(Math.abs);
+    const axial = ['rx', 'ry', 'rz'][local.indexOf(Math.max(...local))];
+    return !b.dof.includes(axial);
   });
 }
